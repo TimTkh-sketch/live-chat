@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TechShop — Интернет-магазин электроники</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F5F5F5; color: #222; }
+
+    /* Header */
+    header {
+      background: #111;
+      color: white;
+      padding: 0 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 64px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+    .logo span { color: #F26522; }
+    nav { display: flex; gap: 24px; }
+    nav a { color: rgba(255,255,255,0.65); text-decoration: none; font-size: 14px; transition: color 0.15s; }
+    nav a:hover { color: white; }
+    .header-right { display: flex; align-items: center; gap: 16px; }
+    .cart-btn {
+      background: #F26522; color: white; border: none; border-radius: 8px;
+      padding: 8px 18px; font-size: 14px; font-weight: 600; cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+    }
+
+    /* Hero */
+    .hero {
+      background: linear-gradient(135deg, #1C1C28 0%, #2d2d40 100%);
+      color: white;
+      padding: 80px 40px;
+      display: flex;
+      align-items: center;
+      gap: 60px;
+    }
+    .hero-text { flex: 1; }
+    .hero-badge { display: inline-block; background: #F26522; color: white; font-size: 11px; font-weight: 700; padding: 4px 12px; border-radius: 99px; margin-bottom: 16px; letter-spacing: 0.5px; text-transform: uppercase; }
+    .hero h1 { font-size: 48px; font-weight: 900; line-height: 1.1; margin-bottom: 16px; }
+    .hero h1 span { color: #F26522; }
+    .hero p { color: rgba(255,255,255,0.6); font-size: 16px; line-height: 1.6; max-width: 420px; margin-bottom: 32px; }
+    .hero-btns { display: flex; gap: 12px; }
+    .btn-primary { background: #F26522; color: white; border: none; border-radius: 10px; padding: 14px 28px; font-size: 15px; font-weight: 700; cursor: pointer; }
+    .btn-secondary { background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 10px; padding: 14px 28px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .hero-img {
+      width: 340px; height: 280px; background: rgba(255,255,255,0.05);
+      border-radius: 20px; display: flex; align-items: center; justify-content: center;
+      font-size: 100px; flex-shrink: 0; border: 1px solid rgba(255,255,255,0.1);
+    }
+
+    /* Catalog */
+    .section { padding: 60px 40px; }
+    .section-title { font-size: 28px; font-weight: 800; margin-bottom: 8px; }
+    .section-sub { color: #888; font-size: 14px; margin-bottom: 32px; }
+    .filters { display: flex; gap: 8px; margin-bottom: 28px; flex-wrap: wrap; }
+    .filter-btn {
+      padding: 7px 16px; border-radius: 99px; border: 1.5px solid #E0E0E0;
+      background: white; font-size: 13px; font-weight: 500; cursor: pointer;
+      transition: all 0.15s; color: #555;
+    }
+    .filter-btn.active { background: #F26522; border-color: #F26522; color: white; }
+    .filter-btn:hover:not(.active) { border-color: #F26522; color: #F26522; }
+
+    /* Products grid */
+    .products { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 20px; }
+    .product-card {
+      background: white; border-radius: 16px; overflow: hidden;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+      transition: transform 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+    }
+    .product-card:hover { transform: translateY(-4px); box-shadow: 0 8px 24px rgba(0,0,0,0.12); }
+    .product-img {
+      height: 180px; background: #F9F9F9;
+      display: flex; align-items: center; justify-content: center; font-size: 64px;
+      position: relative;
+    }
+    .badge-new { position: absolute; top: 12px; left: 12px; background: #10b981; color: white; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
+    .badge-sale { position: absolute; top: 12px; left: 12px; background: #ef4444; color: white; font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 6px; }
+    .product-body { padding: 16px; }
+    .product-brand { font-size: 11px; color: #F26522; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .product-name { font-size: 15px; font-weight: 700; color: #111; margin-bottom: 6px; line-height: 1.3; }
+    .product-desc { font-size: 12px; color: #888; margin-bottom: 12px; line-height: 1.5; }
+    .product-footer { display: flex; align-items: center; justify-content: space-between; }
+    .price { font-size: 20px; font-weight: 900; color: #111; }
+    .price-old { font-size: 13px; color: #bbb; text-decoration: line-through; margin-right: 4px; }
+    .add-btn {
+      background: #F26522; color: white; border: none; border-radius: 8px;
+      padding: 8px 14px; font-size: 13px; font-weight: 700; cursor: pointer; transition: opacity 0.15s;
+    }
+    .add-btn:hover { opacity: 0.85; }
+
+    /* Features */
+    .features {
+      background: white;
+      padding: 50px 40px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 24px;
+      text-align: center;
+    }
+    .feature-icon { font-size: 36px; margin-bottom: 12px; }
+    .feature-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .feature-text { font-size: 13px; color: #888; line-height: 1.5; }
+
+    /* Footer */
+    footer { background: #111; color: rgba(255,255,255,0.5); padding: 40px; text-align: center; font-size: 13px; }
+    footer strong { color: white; }
+
+    @media (max-width: 768px) {
+      header { padding: 0 16px; }
+      nav { display: none; }
+      .hero { padding: 40px 16px; flex-direction: column; }
+      .hero h1 { font-size: 32px; }
+      .hero-img { display: none; }
+      .section { padding: 40px 16px; }
+      .features { grid-template-columns: repeat(2, 1fr); padding: 40px 16px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Header -->
+  <header>
+    <div class="logo">Tech<span>Shop</span></div>
+    <nav>
+      <a href="#">Каталог</a>
+      <a href="#">Бренды</a>
+      <a href="#">Акции</a>
+      <a href="#">Доставка</a>
+      <a href="#">Контакты</a>
+    </nav>
+    <div class="header-right">
+      <button class="cart-btn">🛒 Корзина (0)</button>
+    </div>
+  </header>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-text">
+      <div class="hero-badge">🔥 Новинки 2026</div>
+      <h1>Лучшая<br/>техника по<br/><span>честным ценам</span></h1>
+      <p>Смартфоны, ноутбуки, наушники и аксессуары. Доставка по всей России за 1–2 дня.</p>
+      <div class="hero-btns">
+        <button class="btn-primary">Перейти в каталог</button>
+        <button class="btn-secondary">Акции и скидки</button>
+      </div>
+    </div>
+    <div class="hero-img">📱</div>
+  </section>
+
+  <!-- Features -->
+  <div class="features">
+    <div>
+      <div class="feature-icon">🚚</div>
+      <div class="feature-title">Быстрая доставка</div>
+      <div class="feature-text">1–2 дня по России, курьером или в пункт выдачи</div>
+    </div>
+    <div>
+      <div class="feature-icon">✅</div>
+      <div class="feature-title">Гарантия 2 года</div>
+      <div class="feature-text">Официальная гарантия на все товары</div>
+    </div>
+    <div>
+      <div class="feature-icon">💳</div>
+      <div class="feature-title">Рассрочка 0%</div>
+      <div class="feature-text">Без переплат и скрытых условий</div>
+    </div>
+    <div>
+      <div class="feature-icon">↩️</div>
+      <div class="feature-title">Возврат 30 дней</div>
+      <div class="feature-text">Вернём деньги без вопросов</div>
+    </div>
+  </div>
+
+  <!-- Catalog -->
+  <section class="section">
+    <h2 class="section-title">Популярные товары</h2>
+    <p class="section-sub">Хиты продаж этого месяца</p>
+
+    <div class="filters">
+      <button class="filter-btn active">Все товары</button>
+      <button class="filter-btn">Смартфоны</button>
+      <button class="filter-btn">Ноутбуки</button>
+      <button class="filter-btn">Наушники</button>
+      <button class="filter-btn">Аксессуары</button>
+    </div>
+
+    <div class="products">
+
+      <div class="product-card">
+        <div class="product-img">📱 <span class="badge-new">NEW</span></div>
+        <div class="product-body">
+          <div class="product-brand">Apple</div>
+          <div class="product-name">iPhone 16 Pro 256GB</div>
+          <div class="product-desc">A18 Pro, камера 48 Мп, Dynamic Island</div>
+          <div class="product-footer">
+            <div class="price">89 990 ₽</div>
+            <button class="add-btn">В корзину</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-img">💻 <span class="badge-sale">-15%</span></div>
+        <div class="product-body">
+          <div class="product-brand">Samsung</div>
+          <div class="product-name">Galaxy Book4 Pro</div>
+          <div class="product-desc">Intel Core Ultra 7, 16 ГБ, AMOLED 14"</div>
+          <div class="product-footer">
+            <div class="price">
+              <span class="price-old">99 990 ₽</span>84 990 ₽
+            </div>
+            <button class="add-btn">В корзину</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-img">🎧</div>
+        <div class="product-body">
+          <div class="product-brand">Sony</div>
+          <div class="product-name">WH-1000XM5</div>
+          <div class="product-desc">Лучшее шумоподавление, 30 ч автономности</div>
+          <div class="product-footer">
+            <div class="price">24 990 ₽</div>
+            <button class="add-btn">В корзину</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-img">⌚ <span class="badge-new">NEW</span></div>
+        <div class="product-body">
+          <div class="product-brand">Apple</div>
+          <div class="product-name">Apple Watch Series 10</div>
+          <div class="product-desc">LTPO3, ЭКГ, измерение давления</div>
+          <div class="product-footer">
+            <div class="price">49 990 ₽</div>
+            <button class="add-btn">В корзину</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-img">📷 <span class="badge-sale">-20%</span></div>
+        <div class="product-body">
+          <div class="product-brand">Canon</div>
+          <div class="product-name">EOS R50 Kit 18-45mm</div>
+          <div class="product-desc">24 Мп, 4K видео, Wi-Fi, беззеркалка</div>
+          <div class="product-footer">
+            <div class="price">
+              <span class="price-old">64 990 ₽</span>51 990 ₽
+            </div>
+            <button class="add-btn">В корзину</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-img">🎮</div>
+        <div class="product-body">
+          <div class="product-brand">Sony</div>
+          <div class="product-name">PlayStation 5 Slim</div>
+          <div class="product-desc">825 ГБ SSD, 4K 120fps, DualSense в комплекте</div>
+          <div class="product-footer">
+            <div class="price">44 990 ₽</div>
+            <button class="add-btn">В корзину</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-img">🖥️</div>
+        <div class="product-body">
+          <div class="product-brand">LG</div>
+          <div class="product-name">UltraWide 34WQ75C</div>
+          <div class="product-desc">34", 3440×1440, IPS, USB-C 96W</div>
+          <div class="product-footer">
+            <div class="price">42 990 ₽</div>
+            <button class="add-btn">В корзину</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="product-card">
+        <div class="product-img">🎵 <span class="badge-sale">-10%</span></div>
+        <div class="product-body">
+          <div class="product-brand">Apple</div>
+          <div class="product-name">AirPods Pro 2</div>
+          <div class="product-desc">ANC, Transparency mode, USB-C, 6 ч</div>
+          <div class="product-footer">
+            <div class="price">
+              <span class="price-old">22 990 ₽</span>19 990 ₽
+            </div>
+            <button class="add-btn">В корзину</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer>
+    <p><strong>TechShop</strong> — демо-страница для тестирования виджета чата</p>
+    <p style="margin-top: 8px;">Чат-виджет предоставлен <a href="https://live-chat.shop" style="color:#F26522; text-decoration:none;">live-chat.shop</a></p>
+  </footer>
+
+  <!-- =============================================
+       ИНТЕГРАЦИЯ LIVECHAT — вот этот один тег
+       нужно вставить на сайт InSales
+  ============================================== -->
+  <script src="https://live-chat.shop/chat.js" data-token="cmr24nu780001crq2jo5bik65"></script>
+
+</body>
+</html>

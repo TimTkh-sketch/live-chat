@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { sendPushToWorkspace } from "@/lib/push"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -26,6 +27,22 @@ export async function POST(req: NextRequest) {
       where: { sessionId, sender: "visitor", isRead: false },
       data: { isRead: true },
     })
+  }
+
+  if (sender === "visitor") {
+    const session = await db.chatSession.findUnique({
+      where: { id: sessionId },
+      select: { workspaceId: true, visitorName: true },
+    })
+    if (session) {
+      const visitorName = session.visitorName || "Посетитель"
+      sendPushToWorkspace(session.workspaceId, {
+        title: `💬 ${visitorName}`,
+        body: text.length > 80 ? text.slice(0, 80) + "…" : text,
+        sessionId,
+        url: "/",
+      }).catch(() => {})
+    }
   }
 
   return NextResponse.json(message)

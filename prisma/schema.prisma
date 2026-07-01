@@ -44,7 +44,8 @@ model Operator {
   lastSeenAt DateTime?
   createdAt  DateTime @default(now())
 
-  sessions ChatSession[]
+  sessions           ChatSession[]
+  pushSubscriptions  PushSubscription[]
 
   @@unique([workspaceId, email])
 }
@@ -80,4 +81,14 @@ model ChatMessage {
   text      String
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+
+model PushSubscription {
+  id         String   @id @default(cuid())
+  operatorId String
+  operator   Operator @relation(fields: [operatorId], references: [id], onDelete: Cascade)
+  endpoint   String   @unique
+  p256dh     String
+  auth       String
+  createdAt  DateTime @default(now())
 }

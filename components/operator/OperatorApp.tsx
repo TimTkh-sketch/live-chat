@@ -125,10 +125,39 @@ export function OperatorApp({
     bottomRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages.length])
 
-  /* ── Notifications ── */
+  /* ── Push notifications + Service Worker ── */
   useEffect(() => {
-    if ("Notification" in window && Notification.permission === "granted") setNotif(true)
+    if ("Notification" in window && Notification.permission === "granted") {
+      setNotif(true)
+      registerPush()
+    }
   }, [])
+
+  async function registerPush() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) return
+    try {
+      const reg = await navigator.serviceWorker.register("/sw.js")
+      const keyRes = await fetch("/api/push")
+      const { publicKey } = await keyRes.json()
+      if (!publicKey) return
+      const sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      })
+      await fetch("/api/push", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: sub }),
+      })
+    } catch {}
+  }
+
+  function urlBase64ToUint8Array(base64String: string) {
+    const padding = "=".repeat((4 - (base64String.length % 4)) % 4)
+    const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/")
+    const raw = window.atob(base64)
+    return Uint8Array.from([...raw].map(c => c.charCodeAt(0)))
+  }
 
   /* ── Actions ── */
   async function patch(id: string, body: Record<string, unknown>) {
@@ -371,7 +400,7 @@ export function OperatorApp({
                   {totalUnread}
                 </span>
               )}
-              <button onClick={async () => { const p = await Notification.requestPermission(); setNotif(p === "granted") }}
+              <button onClick={async () => { const p = await Notification.requestPermission(); if (p === "granted") { setNotif(true); registerPush() } else { setNotif(false) } }}
                 style={{ background: "none", border: "none", cursor: "pointer", color: notif ? "#4ade80" : "rgba(255,255,255,0.4)", display: "flex", padding: 6 }}>
                 {notif ? <Bell size={18} /> : <BellOff size={18} />}
               </button>
@@ -538,7 +567,7 @@ export function OperatorApp({
 
         <div style={{ flex: 1 }} />
 
-        <button onClick={async () => { const p = await Notification.requestPermission(); setNotif(p === "granted") }}
+        <button onClick={async () => { const p = await Notification.requestPermission(); if (p === "granted") { setNotif(true); registerPush() } else { setNotif(false) } }}
           title={notif ? "Уведомления включены" : "Включить уведомления"}
           style={{ width: 44, height: 44, borderRadius: 10, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", color: notif ? "#4ade80" : "rgba(255,255,255,0.3)", transition: "all 0.15s" }}>
           {notif ? <Bell size={18} /> : <BellOff size={18} />}
