@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useCallback } from "react"
 import {
   MessageCircle, Send, LogOut, Search, Clock, CheckCheck,
-  Check, Zap, XCircle, RotateCcw, Circle,
+  Check, Zap, XCircle, RotateCcw, ArrowLeft,
   Globe, User, Hash, ChevronRight, Bell, BellOff,
   Inbox, Activity, Archive, PauseCircle, Settings2,
 } from "lucide-react"
@@ -33,6 +33,17 @@ const STATUS_DOT: Record<string, string> = {
   closed:    "bg-gray-300",
 }
 
+const STATUS_LABEL: Record<string, string> = {
+  waiting: "Ожидает", active: "Активный", postponed: "Отложен", closed: "Закрыт",
+}
+
+const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
+  active:    { bg: "#dcfce7", color: "#16a34a" },
+  waiting:   { bg: "#fef3c7", color: "#b45309" },
+  postponed: { bg: "#dbeafe", color: "#1d4ed8" },
+  closed:    { bg: "#F3F4F6", color: "#6B7280" },
+}
+
 export function OperatorApp({
   currentOperator,
   initialSessions,
@@ -44,15 +55,17 @@ export function OperatorApp({
   operators: Operator[]
   settings: ChatSettings | null
 }) {
-  const [filter,    setFilter]    = useState("waiting")
-  const [sessions,  setSessions]  = useState<Session[]>(initialSessions)
-  const [activeId,  setActiveId]  = useState<string | null>(null)
-  const [messages,  setMessages]  = useState<Message[]>([])
-  const [input,     setInput]     = useState("")
-  const [sending,   setSending]   = useState(false)
-  const [search,    setSearch]    = useState("")
-  const [notif,     setNotif]     = useState(false)
-  const [showInfo,  setShowInfo]  = useState(true)
+  const [filter,     setFilter]     = useState("waiting")
+  const [sessions,   setSessions]   = useState<Session[]>(initialSessions)
+  const [activeId,   setActiveId]   = useState<string | null>(null)
+  const [messages,   setMessages]   = useState<Message[]>([])
+  const [input,      setInput]      = useState("")
+  const [sending,    setSending]    = useState(false)
+  const [search,     setSearch]     = useState("")
+  const [notif,      setNotif]      = useState(false)
+  const [showInfo,   setShowInfo]   = useState(true)
+  const [isMobile,   setIsMobile]   = useState(false)
+  const [mobileView, setMobileView] = useState<"list" | "chat">("list")
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLInputElement>(null)
 
@@ -65,6 +78,14 @@ export function OperatorApp({
   const color        = settings?.primaryColor ?? "#F26522"
   const quickReplies = settings?.quickReplies ?? []
   const totalUnread  = sessions.reduce((a, s) => a + (s.unreadCount ?? 0), 0)
+
+  /* ── Mobile detection ── */
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 768)
+    check()
+    window.addEventListener("resize", check)
+    return () => window.removeEventListener("resize", check)
+  }, [])
 
   /* ── Heartbeat ── */
   useEffect(() => {
@@ -116,8 +137,8 @@ export function OperatorApp({
   }
 
   const accept   = () => activeId && patch(activeId, { status: "active",    operatorId: currentOperator.id })
-  const postpone = () => activeId && patch(activeId, { status: "postponed", postponedUntil: new Date(Date.now() + 5 * 60000).toISOString(), operatorId: null }).then(() => { setActiveId(null); setMessages([]) })
-  const close    = () => activeId && patch(activeId, { status: "closed" }).then(() => { setActiveId(null); setMessages([]) })
+  const postpone = () => activeId && patch(activeId, { status: "postponed", postponedUntil: new Date(Date.now() + 5 * 60000).toISOString(), operatorId: null }).then(() => { setActiveId(null); setMessages([]); if (isMobile) setMobileView("list") })
+  const close    = () => activeId && patch(activeId, { status: "closed" }).then(() => { setActiveId(null); setMessages([]); if (isMobile) setMobileView("list") })
   const reopen   = () => activeId && patch(activeId, { status: "waiting",   operatorId: null }).then(fetchSessions)
 
   async function send(text: string) {
@@ -135,6 +156,12 @@ export function OperatorApp({
     window.location.href = "/login"
   }
 
+  function openSession(id: string) {
+    setActiveId(id)
+    fetchMessages(id)
+    if (isMobile) setMobileView("chat")
+  }
+
   /* ── Group messages by date ── */
   const grouped: { date: string; msgs: Message[] }[] = []
   for (const m of messages) {
@@ -148,21 +175,343 @@ export function OperatorApp({
     !search || (s.visitorName ?? "Посетитель").toLowerCase().includes(search.toLowerCase())
   )
 
-  const tabCount = (key: string) => key === filter ? sessions.length : 0
+  /* ── Shared: message bubbles ── */
+  const renderMessages = () => (
+    <div style={{ flex: 1, overflowY: "auto", padding: isMobile ? "12px 14px" : "20px 24px", display: "flex", flexDirection: "column", gap: 2, background: "#F8F9FA" }}>
+      {grouped.map(group => (
+        <div key={group.date}>
+          <div style={{ display: "flex", justifyContent: "center", margin: "16px 0 12px" }}>
+            <span style={{ fontSize: 11, color: "#9CA3AF", background: "white", padding: "4px 14px", borderRadius: 99, border: "1px solid #E5E7EB", fontWeight: 500, boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}>
+              {group.date}
+            </span>
+          </div>
+          {group.msgs.map((m, i) => {
+            const isOp  = m.sender === "operator"
+            const prev  = group.msgs[i - 1]
+            const showAv = !isOp && (!prev || prev.sender !== m.sender)
+            return (
+              <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: isOp ? "flex-end" : "flex-start", marginBottom: 6 }}>
+                <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexDirection: isOp ? "row-reverse" : "row" }}>
+                  {!isOp && (
+                    <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#FFF5EF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 11, color, flexShrink: 0, opacity: showAv ? 1 : 0 }}>
+                      {(active?.visitorName ?? "П")[0].toUpperCase()}
+                    </div>
+                  )}
+                  <div style={{
+                    maxWidth: isMobile ? "78%" : "64%", padding: "10px 14px",
+                    borderRadius: isOp ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                    background: isOp ? color : "white",
+                    color: isOp ? "white" : "#111",
+                    fontSize: 14, lineHeight: 1.55,
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                  }}>
+                    {m.text}
+                  </div>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3, paddingLeft: isOp ? 0 : 36, justifyContent: isOp ? "flex-end" : "flex-start" }}>
+                  <span style={{ fontSize: 10, color: "#9CA3AF" }}>{formatTime(m.createdAt)}</span>
+                  {isOp && (m.isRead
+                    ? <CheckCheck size={12} color="#60A5FA" />
+                    : <Check size={12} color="#9CA3AF" />)}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      ))}
+      {messages.length === 0 && (
+        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#D1D5DB", fontSize: 13 }}>
+          Нет сообщений
+        </div>
+      )}
+      <div ref={bottomRef} />
+    </div>
+  )
 
+  /* ── Shared: input bar ── */
+  const renderInput = () => {
+    if (active?.status === "closed") return (
+      <div style={{ padding: "14px 16px", background: "white", borderTop: "1px solid #F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+        <p style={{ fontSize: 13, color: "#9CA3AF" }}>Чат закрыт</p>
+        <button onClick={reopen}
+          style={{ padding: "7px 14px", borderRadius: 10, background: "#f0fdf4", color: "#16a34a", fontWeight: 600, fontSize: 12, border: "1px solid #BBF7D0", cursor: "pointer" }}>
+          Открыть снова
+        </button>
+      </div>
+    )
+    if (active?.status === "postponed") return (
+      <div style={{ padding: "14px 16px", background: "#EFF6FF", borderTop: "1px solid #BFDBFE", display: "flex", alignItems: "center", gap: 8 }}>
+        <Clock size={15} color="#3B82F6" />
+        <p style={{ fontSize: 13, color: "#1D4ED8" }}>Диалог отложен на 5 минут</p>
+      </div>
+    )
+    if (!canWrite) return null
+    return (
+      <div style={{ padding: isMobile ? "10px 12px" : "12px 16px", background: "white", borderTop: "1px solid #F3F4F6" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#F8F9FA", borderRadius: 14, padding: isMobile ? "6px 6px 6px 14px" : "8px 8px 8px 16px", border: "1.5px solid #E5E7EB" }}>
+          <input
+            ref={inputRef}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+            onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input) } }}
+            placeholder={active?.status === "waiting" && !isMine ? "Сначала примите диалог..." : "Напишите ответ..."}
+            disabled={active?.status === "waiting" && !isMine}
+            style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: isMobile ? 15 : 14, color: "#111" }}
+          />
+          <button onClick={() => send(input)} disabled={!input.trim() || sending}
+            style={{
+              width: isMobile ? 40 : 36, height: isMobile ? 40 : 36, borderRadius: 10, border: "none", cursor: "pointer",
+              background: input.trim() ? color : "#E5E7EB",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              transition: "all 0.15s", flexShrink: 0,
+            }}>
+            {sending
+              ? <div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+              : <Send size={15} color={input.trim() ? "white" : "#9CA3AF"} />}
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  /* ── Shared: quick replies ── */
+  const renderQuickReplies = () => {
+    if (!quickReplies.length || !canWrite) return null
+    return (
+      <div style={{ padding: "8px 12px", display: "flex", gap: 6, overflowX: "auto", background: "white", borderTop: "1px solid #F3F4F6", flexShrink: 0 }}>
+        {!isMobile && (
+          <span style={{ fontSize: 11, color: "#9CA3AF", display: "flex", alignItems: "center", gap: 4, marginRight: 4, flexShrink: 0 }}>
+            <Zap size={11} color={color} /> Быстрые:
+          </span>
+        )}
+        {quickReplies.map((qr, i) => (
+          <button key={i} onClick={() => send(qr)}
+            style={{ padding: "5px 12px", borderRadius: 99, border: "1px solid #E5E7EB", background: "transparent", color: "#374151", fontSize: 12, fontWeight: 500, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
+            {qr}
+          </button>
+        ))}
+      </div>
+    )
+  }
+
+  /* ── Shared: session item ── */
+  const renderSessionItem = (s: Session) => {
+    const isSelected = s.id === activeId
+    const lastMsg    = s.messages?.[0]
+    const isTakenMe  = s.operatorId === currentOperator.id
+    const isTakenOt  = s.operatorId && !isTakenMe
+    return (
+      <button key={s.id}
+        onClick={() => openSession(s.id)}
+        style={{
+          width: "100%", textAlign: "left", border: "none", cursor: "pointer",
+          padding: isMobile ? "14px 16px" : "12px 16px",
+          background: isSelected && !isMobile ? "#FFF5EF" : "transparent",
+          borderLeft: isSelected && !isMobile ? `3px solid ${color}` : "3px solid transparent",
+          borderBottom: "1px solid #F3F4F6",
+          transition: "all 0.12s", display: "flex", gap: 12, alignItems: "flex-start",
+          opacity: isTakenOt ? 0.55 : 1,
+        }}>
+        <div style={{
+          width: 42, height: 42, borderRadius: "50%", flexShrink: 0,
+          background: isTakenMe ? "#dcfce7" : "#FFF5EF",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          fontWeight: 700, fontSize: 15,
+          color: isTakenMe ? "#16a34a" : color, position: "relative",
+        }}>
+          {(s.visitorName ?? "П")[0].toUpperCase()}
+          <span style={{
+            position: "absolute", bottom: 0, right: 0, width: 11, height: 11, borderRadius: "50%",
+            border: "2px solid white",
+          }} className={STATUS_DOT[s.status]} />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+            <p style={{ fontWeight: 600, fontSize: 14, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+              {s.visitorName ?? "Посетитель"}
+            </p>
+            <span style={{ fontSize: 11, color: "#9CA3AF", flexShrink: 0 }}>{formatTime(s.updatedAt)}</span>
+          </div>
+          <p style={{ fontSize: 13, color: "#6B7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>
+            {lastMsg ? lastMsg.text : "Нет сообщений"}
+          </p>
+        </div>
+
+        {(s.unreadCount ?? 0) > 0 && (
+          <span style={{ width: 20, height: 20, borderRadius: 99, background: color, color: "white", fontSize: 10, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
+            {(s.unreadCount ?? 0) > 9 ? "9+" : s.unreadCount}
+          </span>
+        )}
+      </button>
+    )
+  }
+
+  /* ══════════════════════════════════════
+      MOBILE LAYOUT
+  ══════════════════════════════════════ */
+  if (isMobile) {
+    return (
+      <div style={{ display: "flex", flexDirection: "column", height: "100svh", background: "#F0F2F5", overflow: "hidden" }}>
+
+        {/* ── Mobile: List View ── */}
+        {mobileView === "list" && (
+          <>
+            {/* Top bar */}
+            <div style={{ background: "#1C1C28", padding: "14px 16px 10px", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 9, background: color, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                <MessageCircle size={17} color="white" />
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ color: "white", fontWeight: 700, fontSize: 16, lineHeight: 1 }}>LiveChat</p>
+                <p style={{ color: "rgba(255,255,255,0.45)", fontSize: 11, marginTop: 2 }}>{currentOperator.name}</p>
+              </div>
+              {totalUnread > 0 && (
+                <span style={{ background: "#ef4444", color: "white", fontSize: 11, fontWeight: 900, padding: "3px 8px", borderRadius: 99 }}>
+                  {totalUnread}
+                </span>
+              )}
+              <button onClick={async () => { const p = await Notification.requestPermission(); setNotif(p === "granted") }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: notif ? "#4ade80" : "rgba(255,255,255,0.4)", display: "flex", padding: 6 }}>
+                {notif ? <Bell size={18} /> : <BellOff size={18} />}
+              </button>
+              <a href="/settings" style={{ color: "rgba(255,255,255,0.4)", display: "flex", padding: 6 }}>
+                <Settings2 size={18} />
+              </a>
+              <button onClick={logout} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.4)", display: "flex", padding: 6 }}>
+                <LogOut size={18} />
+              </button>
+            </div>
+
+            {/* Search */}
+            <div style={{ background: "white", padding: "10px 16px", borderBottom: "1px solid #EAECF0" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#F7F8FA", borderRadius: 10, padding: "10px 14px" }}>
+                <Search size={14} color="#9CA3AF" />
+                <input value={search} onChange={e => setSearch(e.target.value)}
+                  placeholder="Поиск по имени..." style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 14, color: "#374151" }} />
+              </div>
+            </div>
+
+            {/* Sessions */}
+            <div style={{ flex: 1, overflowY: "auto", background: "white" }}>
+              {filtered.length === 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 240, gap: 10, color: "#D1D5DB" }}>
+                  <Inbox size={36} />
+                  <p style={{ fontSize: 14 }}>Пусто</p>
+                </div>
+              ) : filtered.map(s => renderSessionItem(s))}
+            </div>
+
+            {/* Bottom tab bar */}
+            <div style={{ background: "#1C1C28", display: "flex", borderTop: "1px solid rgba(255,255,255,0.08)", flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+              {TABS.map(tab => {
+                const Icon = tab.icon
+                const cnt = tab.key === "waiting" ? totalUnread : 0
+                const isActive = filter === tab.key
+                return (
+                  <button key={tab.key}
+                    onClick={() => { setFilter(tab.key); setActiveId(null); setMessages([]) }}
+                    style={{
+                      flex: 1, padding: "10px 0 10px", border: "none", background: "transparent", cursor: "pointer",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                      color: isActive ? color : "rgba(255,255,255,0.35)",
+                      position: "relative",
+                    }}>
+                    <Icon size={21} />
+                    <span style={{ fontSize: 10, fontWeight: isActive ? 700 : 400 }}>{tab.label}</span>
+                    {cnt > 0 && (
+                      <span style={{ position: "absolute", top: 7, right: "22%", width: 15, height: 15, borderRadius: 99, background: "#ef4444", color: "white", fontSize: 9, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                        {cnt > 9 ? "9+" : cnt}
+                      </span>
+                    )}
+                  </button>
+                )
+              })}
+            </div>
+          </>
+        )}
+
+        {/* ── Mobile: Chat View ── */}
+        {mobileView === "chat" && activeId && (
+          <>
+            {/* Chat header */}
+            <div style={{ padding: "0 12px", minHeight: 60, background: "#1C1C28", display: "flex", alignItems: "center", gap: 8, flexShrink: 0 }}>
+              <button onClick={() => { setMobileView("list") }}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "white", display: "flex", alignItems: "center", padding: "8px 4px", flexShrink: 0 }}>
+                <ArrowLeft size={22} />
+              </button>
+
+              <div style={{ width: 34, height: 34, borderRadius: "50%", background: color + "33", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14, color, flexShrink: 0 }}>
+                {(active?.visitorName ?? "П")[0].toUpperCase()}
+              </div>
+
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontWeight: 600, fontSize: 14, color: "white", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {active?.visitorName ?? "Посетитель"}
+                </p>
+                {active?.visitorPage && (
+                  <p style={{ fontSize: 10, color: "rgba(255,255,255,0.45)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {active.visitorPage}
+                  </p>
+                )}
+              </div>
+
+              <span style={{
+                fontSize: 10, fontWeight: 600, padding: "3px 9px", borderRadius: 99, flexShrink: 0,
+                background: STATUS_COLORS[active?.status ?? "waiting"]?.bg,
+                color: STATUS_COLORS[active?.status ?? "waiting"]?.color,
+              }}>
+                {STATUS_LABEL[active?.status ?? "waiting"]}
+              </span>
+
+              {(active?.status === "waiting" || (active?.status === "active" && !active.operatorId)) && !takenByOther && (
+                <button onClick={accept}
+                  style={{ padding: "7px 12px", borderRadius: 8, background: "#16a34a", color: "white", fontWeight: 600, fontSize: 12, border: "none", cursor: "pointer", flexShrink: 0 }}>
+                  Принять
+                </button>
+              )}
+              {isMine && active?.status === "active" && (
+                <button onClick={close}
+                  style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "transparent", color: "rgba(255,255,255,0.65)", fontSize: 12, cursor: "pointer", flexShrink: 0 }}>
+                  Закрыть
+                </button>
+              )}
+              {active?.status === "closed" && (
+                <button onClick={reopen}
+                  style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid rgba(255,255,255,0.2)", background: "transparent", color: "rgba(255,255,255,0.65)", fontSize: 12, cursor: "pointer", flexShrink: 0 }}>
+                  Открыть
+                </button>
+              )}
+            </div>
+
+            {/* Messages */}
+            {renderMessages()}
+
+            {/* Quick replies */}
+            {renderQuickReplies()}
+
+            {/* Input */}
+            {renderInput()}
+          </>
+        )}
+
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    )
+  }
+
+  /* ══════════════════════════════════════
+      DESKTOP LAYOUT (unchanged)
+  ══════════════════════════════════════ */
   return (
     <div style={{ display: "flex", height: "100vh", background: "#F0F2F5", overflow: "hidden" }}>
 
-      {/* ══════════════════════════════════════
-          NAV RAIL — иконки + аватар
-      ══════════════════════════════════════ */}
+      {/* NAV RAIL */}
       <nav style={{ width: 64, background: "#1C1C28", display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 0", gap: 4, flexShrink: 0 }}>
-        {/* Logo */}
         <div style={{ width: 36, height: 36, borderRadius: 10, background: color, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
           <MessageCircle size={18} color="white" />
         </div>
 
-        {/* Nav items */}
         {TABS.map(tab => {
           const Icon = tab.icon
           const cnt = tab.key === "waiting" ? totalUnread : 0
@@ -189,26 +538,22 @@ export function OperatorApp({
 
         <div style={{ flex: 1 }} />
 
-        {/* Notifications */}
         <button onClick={async () => { const p = await Notification.requestPermission(); setNotif(p === "granted") }}
           title={notif ? "Уведомления включены" : "Включить уведомления"}
           style={{ width: 44, height: 44, borderRadius: 10, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", color: notif ? "#4ade80" : "rgba(255,255,255,0.3)", transition: "all 0.15s" }}>
           {notif ? <Bell size={18} /> : <BellOff size={18} />}
         </button>
 
-        {/* Settings */}
         <a href="/settings" title="Настройки"
           style={{ width: 44, height: 44, borderRadius: 10, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", color: "rgba(255,255,255,0.3)", textDecoration: "none", transition: "color 0.15s" }}>
           <Settings2 size={18} />
         </a>
 
-        {/* Logout */}
         <button onClick={logout} title="Выйти"
           style={{ width: 44, height: 44, borderRadius: 10, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", color: "rgba(255,255,255,0.3)", transition: "color 0.15s", marginBottom: 8 }}>
           <LogOut size={18} />
         </button>
 
-        {/* Avatar */}
         <div title={currentOperator.name}
           style={{ width: 36, height: 36, borderRadius: "50%", background: color, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 14, position: "relative", flexShrink: 0, overflow: "hidden" }}>
           {currentOperator.avatar
@@ -218,12 +563,8 @@ export function OperatorApp({
         </div>
       </nav>
 
-      {/* ══════════════════════════════════════
-          SESSION LIST
-      ══════════════════════════════════════ */}
+      {/* SESSION LIST */}
       <div style={{ width: 280, background: "white", display: "flex", flexDirection: "column", borderRight: "1px solid #EAECF0", flexShrink: 0 }}>
-
-        {/* Header */}
         <div style={{ padding: "18px 16px 12px", borderBottom: "1px solid #F3F4F6" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
             <h2 style={{ fontWeight: 700, fontSize: 15, color: "#111", margin: 0 }}>
@@ -235,7 +576,6 @@ export function OperatorApp({
               </span>
             )}
           </div>
-          {/* Search */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#F7F8FA", borderRadius: 10, padding: "8px 12px" }}>
             <Search size={13} color="#9CA3AF" />
             <input value={search} onChange={e => setSearch(e.target.value)}
@@ -243,72 +583,19 @@ export function OperatorApp({
           </div>
         </div>
 
-        {/* List */}
         <div style={{ flex: 1, overflowY: "auto" }}>
           {filtered.length === 0 ? (
             <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 8, color: "#D1D5DB" }}>
               <Inbox size={32} />
               <p style={{ fontSize: 13 }}>Пусто</p>
             </div>
-          ) : filtered.map(s => {
-            const isSelected = s.id === activeId
-            const lastMsg    = s.messages?.[0]
-            const isTakenMe  = s.operatorId === currentOperator.id
-            const isTakenOt  = s.operatorId && !isTakenMe
-            return (
-              <button key={s.id}
-                onClick={() => { setActiveId(s.id); fetchMessages(s.id) }}
-                style={{
-                  width: "100%", textAlign: "left", border: "none", cursor: "pointer",
-                  padding: "12px 16px", background: isSelected ? "#FFF5EF" : "transparent",
-                  borderLeft: isSelected ? `3px solid ${color}` : "3px solid transparent",
-                  transition: "all 0.12s", display: "flex", gap: 10, alignItems: "flex-start",
-                  opacity: isTakenOt ? 0.55 : 1,
-                }}>
-                {/* Avatar */}
-                <div style={{
-                  width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
-                  background: isTakenMe ? "#dcfce7" : "#FFF5EF",
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  fontWeight: 700, fontSize: 14,
-                  color: isTakenMe ? "#16a34a" : color, position: "relative",
-                }}>
-                  {(s.visitorName ?? "П")[0].toUpperCase()}
-                  <span style={{
-                    position: "absolute", bottom: 0, right: 0, width: 10, height: 10, borderRadius: "50%",
-                    border: "2px solid white",
-                  }} className={STATUS_DOT[s.status]} />
-                </div>
-
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
-                    <p style={{ fontWeight: 600, fontSize: 13, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                      {s.visitorName ?? "Посетитель"}
-                    </p>
-                    <span style={{ fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>{formatTime(s.updatedAt)}</span>
-                  </div>
-                  <p style={{ fontSize: 12, color: "#6B7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>
-                    {lastMsg ? lastMsg.text : "Нет сообщений"}
-                  </p>
-                </div>
-
-                {(s.unreadCount ?? 0) > 0 && (
-                  <span style={{ width: 18, height: 18, borderRadius: 99, background: color, color: "white", fontSize: 9, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
-                    {(s.unreadCount ?? 0) > 9 ? "9+" : s.unreadCount}
-                  </span>
-                )}
-              </button>
-            )
-          })}
+          ) : filtered.map(s => renderSessionItem(s))}
         </div>
       </div>
 
-      {/* ══════════════════════════════════════
-          CHAT AREA
-      ══════════════════════════════════════ */}
+      {/* CHAT AREA */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {!activeId ? (
-          /* Empty state */
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, color: "#D1D5DB" }}>
             <div style={{ width: 72, height: 72, borderRadius: 20, background: "#F9FAFB", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <MessageCircle size={32} color="#E5E7EB" />
@@ -341,15 +628,13 @@ export function OperatorApp({
                 )}
               </div>
 
-              {/* Status + actions */}
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                {/* Status chip */}
                 <span style={{
                   fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99,
-                  background: active?.status === "active" ? "#dcfce7" : active?.status === "waiting" ? "#fef3c7" : active?.status === "postponed" ? "#dbeafe" : "#F3F4F6",
-                  color: active?.status === "active" ? "#16a34a" : active?.status === "waiting" ? "#b45309" : active?.status === "postponed" ? "#1d4ed8" : "#6B7280",
+                  background: STATUS_COLORS[active?.status ?? "waiting"]?.bg,
+                  color: STATUS_COLORS[active?.status ?? "waiting"]?.color,
                 }}>
-                  {{ waiting: "Ожидает", active: "Активный", postponed: "Отложен", closed: "Закрыт" }[active?.status ?? "waiting"]}
+                  {STATUS_LABEL[active?.status ?? "waiting"]}
                 </span>
 
                 {takenByOther && takenByOp && (
@@ -393,128 +678,21 @@ export function OperatorApp({
             </div>
 
             <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-              {/* Messages */}
               <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
-                <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 2, background: "#F8F9FA" }}>
-                  {grouped.map(group => (
-                    <div key={group.date}>
-                      <div style={{ display: "flex", justifyContent: "center", margin: "16px 0 12px" }}>
-                        <span style={{ fontSize: 11, color: "#9CA3AF", background: "white", padding: "4px 14px", borderRadius: 99, border: "1px solid #E5E7EB", fontWeight: 500, boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}>
-                          {group.date}
-                        </span>
-                      </div>
-                      {group.msgs.map((m, i) => {
-                        const isOp  = m.sender === "operator"
-                        const prev  = group.msgs[i - 1]
-                        const showAv = !isOp && (!prev || prev.sender !== m.sender)
-                        return (
-                          <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: isOp ? "flex-end" : "flex-start", marginBottom: 6 }}>
-                            <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexDirection: isOp ? "row-reverse" : "row" }}>
-                              {/* Visitor avatar */}
-                              {!isOp && (
-                                <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#FFF5EF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 11, color, flexShrink: 0, opacity: showAv ? 1 : 0 }}>
-                                  {(active?.visitorName ?? "П")[0].toUpperCase()}
-                                </div>
-                              )}
-                              <div style={{
-                                maxWidth: "64%", padding: "10px 14px",
-                                borderRadius: isOp ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
-                                background: isOp ? color : "white",
-                                color: isOp ? "white" : "#111",
-                                fontSize: 14, lineHeight: 1.55,
-                                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
-                              }}>
-                                {m.text}
-                              </div>
-                            </div>
-                            <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3, paddingLeft: isOp ? 0 : 36, paddingRight: isOp ? 0 : 0, justifyContent: isOp ? "flex-end" : "flex-start" }}>
-                              <span style={{ fontSize: 10, color: "#9CA3AF" }}>{formatTime(m.createdAt)}</span>
-                              {isOp && (m.isRead
-                                ? <CheckCheck size={12} color="#60A5FA" />
-                                : <Check size={12} color="#9CA3AF" />)}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ))}
-                  {messages.length === 0 && (
-                    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#D1D5DB", fontSize: 13 }}>
-                      Нет сообщений
-                    </div>
-                  )}
-                  <div ref={bottomRef} />
-                </div>
-
-                {/* Quick replies */}
-                {quickReplies.length > 0 && canWrite && (
-                  <div style={{ padding: "8px 16px", display: "flex", gap: 6, flexWrap: "wrap", background: "white", borderTop: "1px solid #F3F4F6" }}>
-                    <span style={{ fontSize: 11, color: "#9CA3AF", display: "flex", alignItems: "center", gap: 4, marginRight: 4 }}>
-                      <Zap size={11} color={color} /> Быстрые ответы:
-                    </span>
-                    {quickReplies.map((qr, i) => (
-                      <button key={i} onClick={() => send(qr)}
-                        style={{ padding: "5px 12px", borderRadius: 99, border: `1px solid #E5E7EB`, background: "transparent", color: "#374151", fontSize: 12, fontWeight: 500, cursor: "pointer", transition: "all 0.12s" }}>
-                        {qr}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {/* Input */}
-                {active?.status === "closed" ? (
-                  <div style={{ padding: "16px 20px", background: "white", borderTop: "1px solid #F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
-                    <p style={{ fontSize: 13, color: "#9CA3AF" }}>Чат закрыт</p>
-                    <button onClick={reopen}
-                      style={{ padding: "7px 14px", borderRadius: 10, background: "#f0fdf4", color: "#16a34a", fontWeight: 600, fontSize: 12, border: "1px solid #BBF7D0", cursor: "pointer" }}>
-                      Открыть снова
-                    </button>
-                  </div>
-                ) : active?.status === "postponed" ? (
-                  <div style={{ padding: "16px 20px", background: "#EFF6FF", borderTop: "1px solid #BFDBFE", display: "flex", alignItems: "center", gap: 8 }}>
-                    <Clock size={15} color="#3B82F6" />
-                    <p style={{ fontSize: 13, color: "#1D4ED8" }}>Диалог отложен на 5 минут</p>
-                  </div>
-                ) : canWrite ? (
-                  <div style={{ padding: "12px 16px", background: "white", borderTop: "1px solid #F3F4F6" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#F8F9FA", borderRadius: 14, padding: "8px 8px 8px 16px", border: "1.5px solid #E5E7EB" }}>
-                      <input
-                        ref={inputRef}
-                        value={input}
-                        onChange={e => setInput(e.target.value)}
-                        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input) } }}
-                        placeholder={active?.status === "waiting" && !isMine ? "Сначала примите диалог..." : "Напишите ответ... (Enter — отправить)"}
-                        disabled={active?.status === "waiting" && !isMine}
-                        style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 14, color: "#111" }}
-                      />
-                      <button onClick={() => send(input)} disabled={!input.trim() || sending}
-                        style={{
-                          width: 36, height: 36, borderRadius: 10, border: "none", cursor: "pointer",
-                          background: input.trim() ? color : "#E5E7EB",
-                          display: "flex", alignItems: "center", justifyContent: "center",
-                          transition: "all 0.15s", flexShrink: 0,
-                        }}>
-                        {sending
-                          ? <div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-                          : <Send size={15} color={input.trim() ? "white" : "#9CA3AF"} />}
-                      </button>
-                    </div>
-                  </div>
-                ) : null}
+                {renderMessages()}
+                {renderQuickReplies()}
+                {renderInput()}
               </div>
 
-              {/* ── Info panel ── */}
+              {/* Info panel */}
               {showInfo && active && (
                 <div style={{ width: 240, background: "white", borderLeft: "1px solid #EAECF0", padding: "20px 16px", overflowY: "auto", flexShrink: 0 }}>
                   <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#9CA3AF", marginBottom: 14 }}>Посетитель</p>
-
                   <InfoRow icon={<User size={13} />} label="Имя" value={active.visitorName ?? "—"} />
                   <InfoRow icon={<Globe size={13} />} label="Страница" value={active.visitorPage ?? "—"} truncate />
                   <InfoRow icon={<Clock size={13} />} label="Начало" value={formatTime(active.createdAt)} />
                   <InfoRow icon={<Hash size={13} />} label="ID сессии" value={active.id.slice(0, 8) + "…"} mono />
-
                   <div style={{ margin: "20px 0", height: 1, background: "#F3F4F6" }} />
-
                   <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#9CA3AF", marginBottom: 14 }}>Оператор</p>
                   {active.operatorId ? (
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -529,9 +707,7 @@ export function OperatorApp({
                   ) : (
                     <p style={{ fontSize: 12, color: "#9CA3AF" }}>Не назначен</p>
                   )}
-
                   <div style={{ margin: "20px 0", height: 1, background: "#F3F4F6" }} />
-
                   <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#9CA3AF", marginBottom: 12 }}>Сообщений</p>
                   <p style={{ fontSize: 24, fontWeight: 800, color: "#111" }}>{messages.length}</p>
                 </div>
