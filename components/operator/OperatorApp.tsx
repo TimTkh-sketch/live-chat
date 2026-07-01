@@ -2,30 +2,35 @@
 
 import { useState, useEffect, useRef, useCallback } from "react"
 import {
-  MessageCircle, Send, Settings, LogOut, Search,
-  Clock, CheckCheck, Check, User, ChevronRight,
-  Zap, XCircle, RotateCcw, Bell, BellOff, Circle,
+  MessageCircle, Send, LogOut, Search, Clock, CheckCheck,
+  Check, Zap, XCircle, RotateCcw, Circle,
+  Globe, User, Hash, ChevronRight, Bell, BellOff,
+  Inbox, Activity, Archive, PauseCircle, Settings2,
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { formatTime, formatDate } from "@/lib/utils"
 
-interface Operator { id: string; name: string; avatar: string | null; isOnline: boolean }
-interface Message { id: string; sessionId: string; sender: string; text: string; createdAt: string; isRead: boolean }
-interface Session {
+interface Operator  { id: string; name: string; avatar: string | null; isOnline: boolean }
+interface Message   { id: string; sessionId: string; sender: string; text: string; createdAt: string; isRead: boolean }
+interface Session   {
   id: string; visitorName: string | null; visitorPage: string | null; status: string
   operatorId: string | null; postponedUntil: string | null; createdAt: string; updatedAt: string
   messages: Message[]; operator: { id: string; name: string } | null; unreadCount?: number
 }
-interface Settings {
-  quickReplies: string[]; greeting: string; primaryColor: string; operatorName: string
-}
+interface ChatSettings { quickReplies: string[]; greeting: string; primaryColor: string; operatorName: string }
 
-const STATUS_LABELS: Record<string, string> = { waiting: "Ожидают", active: "Активные", postponed: "Отложенные", closed: "Закрытые" }
-const STATUS_COLORS: Record<string, string> = {
-  waiting:   "bg-amber-100 text-amber-700",
-  active:    "bg-emerald-100 text-emerald-700",
-  postponed: "bg-blue-100 text-blue-600",
-  closed:    "bg-gray-100 text-gray-500",
+const TABS = [
+  { key: "waiting",   label: "Входящие",   icon: Inbox },
+  { key: "active",    label: "Активные",   icon: Activity },
+  { key: "postponed", label: "Отложенные", icon: PauseCircle },
+  { key: "closed",    label: "Архив",      icon: Archive },
+]
+
+const STATUS_DOT: Record<string, string> = {
+  waiting:   "bg-amber-400",
+  active:    "bg-emerald-400",
+  postponed: "bg-blue-400",
+  closed:    "bg-gray-300",
 }
 
 export function OperatorApp({
@@ -37,29 +42,29 @@ export function OperatorApp({
   currentOperator: { id: string; name: string; avatar: string | null; workspaceId: string }
   initialSessions: Session[]
   operators: Operator[]
-  settings: Settings | null
+  settings: ChatSettings | null
 }) {
-  const [filter, setFilter]   = useState("waiting")
-  const [sessions, setSessions] = useState<Session[]>(initialSessions)
-  const [activeId, setActiveId] = useState<string | null>(null)
-  const [messages, setMessages] = useState<Message[]>([])
-  const [input, setInput]     = useState("")
-  const [sending, setSending]   = useState(false)
-  const [search, setSearch]     = useState("")
-  const [notifEnabled, setNotifEnabled] = useState(false)
+  const [filter,    setFilter]    = useState("waiting")
+  const [sessions,  setSessions]  = useState<Session[]>(initialSessions)
+  const [activeId,  setActiveId]  = useState<string | null>(null)
+  const [messages,  setMessages]  = useState<Message[]>([])
+  const [input,     setInput]     = useState("")
+  const [sending,   setSending]   = useState(false)
+  const [search,    setSearch]    = useState("")
+  const [notif,     setNotif]     = useState(false)
+  const [showInfo,  setShowInfo]  = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLInputElement>(null)
 
-  const activeSession = sessions.find(s => s.id === activeId) ?? null
-  const isMine        = activeSession?.operatorId === currentOperator.id
-  const takenByOther  = !!(activeSession?.operatorId && activeSession.operatorId !== currentOperator.id)
-  const takenByOp     = operators.find(o => o.id === activeSession?.operatorId)
-  const canWrite      = activeSession?.status !== "closed" && activeSession?.status !== "postponed" && !takenByOther
+  const active       = sessions.find(s => s.id === activeId) ?? null
+  const isMine       = active?.operatorId === currentOperator.id
+  const takenByOther = !!(active?.operatorId && active.operatorId !== currentOperator.id)
+  const takenByOp    = operators.find(o => o.id === active?.operatorId)
+  const canWrite     = active?.status !== "closed" && active?.status !== "postponed" && !takenByOther
 
-  const quickReplies  = settings?.quickReplies ?? []
-  const color         = settings?.primaryColor ?? "#F26522"
-
-  const totalUnread = sessions.reduce((acc, s) => acc + (s.unreadCount ?? 0), 0)
+  const color        = settings?.primaryColor ?? "#F26522"
+  const quickReplies = settings?.quickReplies ?? []
+  const totalUnread  = sessions.reduce((a, s) => a + (s.unreadCount ?? 0), 0)
 
   /* ── Heartbeat ── */
   useEffect(() => {
@@ -68,20 +73,24 @@ export function OperatorApp({
     return () => clearInterval(t)
   }, [])
 
-  /* ── Fetch sessions ── */
+  /* ── Poll sessions ── */
   const fetchSessions = useCallback(async () => {
     const r = await fetch(`/api/session?workspaceId=${currentOperator.workspaceId}&status=${filter}`)
-    const data = await r.json()
-    if (Array.isArray(data)) setSessions(data)
+    const d = await r.json()
+    if (Array.isArray(d)) setSessions(d)
   }, [currentOperator.workspaceId, filter])
 
-  useEffect(() => { fetchSessions(); const t = setInterval(fetchSessions, 3000); return () => clearInterval(t) }, [fetchSessions])
+  useEffect(() => {
+    fetchSessions()
+    const t = setInterval(fetchSessions, 3000)
+    return () => clearInterval(t)
+  }, [fetchSessions])
 
-  /* ── Fetch messages ── */
+  /* ── Poll messages ── */
   const fetchMessages = useCallback(async (sid: string) => {
     const r = await fetch(`/api/messages?sessionId=${sid}`)
-    const data = await r.json()
-    if (Array.isArray(data)) setMessages(data)
+    const d = await r.json()
+    if (Array.isArray(d)) setMessages(d)
   }, [])
 
   useEffect(() => {
@@ -91,25 +100,27 @@ export function OperatorApp({
     return () => clearInterval(t)
   }, [activeId, fetchMessages])
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages.length])
-
-  /* ── Notification permission ── */
   useEffect(() => {
-    if ("Notification" in window && Notification.permission === "granted") setNotifEnabled(true)
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages.length])
+
+  /* ── Notifications ── */
+  useEffect(() => {
+    if ("Notification" in window && Notification.permission === "granted") setNotif(true)
   }, [])
 
   /* ── Actions ── */
-  async function patchSession(id: string, body: Record<string, unknown>) {
+  async function patch(id: string, body: Record<string, unknown>) {
     await fetch(`/api/session/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
     fetchSessions()
   }
 
-  async function accept()   { if (!activeId) return; await patchSession(activeId, { status: "active", operatorId: currentOperator.id }) }
-  async function postpone() { if (!activeId) return; await patchSession(activeId, { status: "postponed", postponedUntil: new Date(Date.now() + 5 * 60000).toISOString(), operatorId: null }); setActiveId(null); setMessages([]) }
-  async function close()    { if (!activeId) return; await patchSession(activeId, { status: "closed" }); setActiveId(null); setMessages([]) }
-  async function reopen()   { if (!activeId) return; await patchSession(activeId, { status: "waiting", operatorId: null }); fetchSessions() }
+  const accept   = () => activeId && patch(activeId, { status: "active",    operatorId: currentOperator.id })
+  const postpone = () => activeId && patch(activeId, { status: "postponed", postponedUntil: new Date(Date.now() + 5 * 60000).toISOString(), operatorId: null }).then(() => { setActiveId(null); setMessages([]) })
+  const close    = () => activeId && patch(activeId, { status: "closed" }).then(() => { setActiveId(null); setMessages([]) })
+  const reopen   = () => activeId && patch(activeId, { status: "waiting",   operatorId: null }).then(fetchSessions)
 
-  async function sendMessage(text: string) {
+  async function send(text: string) {
     if (!activeId || !text.trim() || sending) return
     setSending(true)
     try {
@@ -124,318 +135,427 @@ export function OperatorApp({
     window.location.href = "/login"
   }
 
-  async function enableNotifications() {
-    const perm = await Notification.requestPermission()
-    setNotifEnabled(perm === "granted")
-  }
-
-  /* ── Message grouping by date ── */
-  const grouped: { date: string; messages: Message[] }[] = []
+  /* ── Group messages by date ── */
+  const grouped: { date: string; msgs: Message[] }[] = []
   for (const m of messages) {
     const d = formatDate(m.createdAt)
     const last = grouped[grouped.length - 1]
-    if (!last || last.date !== d) grouped.push({ date: d, messages: [m] })
-    else last.messages.push(m)
+    if (!last || last.date !== d) grouped.push({ date: d, msgs: [m] })
+    else last.msgs.push(m)
   }
 
-  const filteredSessions = sessions.filter(s =>
+  const filtered = sessions.filter(s =>
     !search || (s.visitorName ?? "Посетитель").toLowerCase().includes(search.toLowerCase())
   )
 
+  const tabCount = (key: string) => key === filter ? sessions.length : 0
+
   return (
-    <div className="h-screen flex overflow-hidden bg-[#F4F5F7]">
+    <div style={{ display: "flex", height: "100vh", background: "#F0F2F5", overflow: "hidden" }}>
 
-      {/* ═══════════════════════════════════
-          LEFT SIDEBAR — Session list
-      ═══════════════════════════════════ */}
-      <aside className="w-72 shrink-0 flex flex-col bg-white border-r border-gray-100" style={{ height: "100vh" }}>
-
-        {/* Operator header */}
-        <div className="flex items-center gap-3 px-4 py-4 border-b border-gray-100">
-          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold shrink-0"
-            style={{ background: color }}>
-            {currentOperator.avatar
-              ? <img src={currentOperator.avatar} className="w-full h-full rounded-full object-cover" alt="" />
-              : currentOperator.name[0].toUpperCase()}
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-gray-900 truncate">{currentOperator.name}</p>
-            <div className="flex items-center gap-1 mt-0.5">
-              <Circle className="h-2 w-2 fill-emerald-400 text-emerald-400" />
-              <span className="text-xs text-gray-400">Онлайн</span>
-            </div>
-          </div>
-          <div className="flex gap-1">
-            <button onClick={notifEnabled ? undefined : enableNotifications}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors"
-              title={notifEnabled ? "Уведомления включены" : "Включить уведомления"}>
-              {notifEnabled ? <Bell className="h-4 w-4 text-emerald-500" /> : <BellOff className="h-4 w-4" />}
-            </button>
-            <button onClick={() => window.location.href = "/settings"}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-colors">
-              <Settings className="h-4 w-4" />
-            </button>
-            <button onClick={logout}
-              className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors">
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
+      {/* ══════════════════════════════════════
+          NAV RAIL — иконки + аватар
+      ══════════════════════════════════════ */}
+      <nav style={{ width: 64, background: "#1C1C28", display: "flex", flexDirection: "column", alignItems: "center", padding: "16px 0", gap: 4, flexShrink: 0 }}>
+        {/* Logo */}
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: color, display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 16 }}>
+          <MessageCircle size={18} color="white" />
         </div>
 
-        {/* Search */}
-        <div className="px-3 py-2.5 border-b border-gray-100">
-          <div className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl">
-            <Search className="h-3.5 w-3.5 text-gray-300 shrink-0" />
+        {/* Nav items */}
+        {TABS.map(tab => {
+          const Icon = tab.icon
+          const cnt = tab.key === "waiting" ? totalUnread : 0
+          return (
+            <button key={tab.key}
+              onClick={() => { setFilter(tab.key); setActiveId(null); setMessages([]) }}
+              title={tab.label}
+              style={{
+                width: 44, height: 44, borderRadius: 10, border: "none", cursor: "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                background: filter === tab.key ? "rgba(255,255,255,0.12)" : "transparent",
+                color: filter === tab.key ? "white" : "rgba(255,255,255,0.35)",
+                transition: "all 0.15s", position: "relative",
+              }}>
+              <Icon size={18} />
+              {cnt > 0 && (
+                <span style={{ position: "absolute", top: 6, right: 6, width: 14, height: 14, borderRadius: 99, background: "#ef4444", color: "white", fontSize: 8, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {cnt > 9 ? "9+" : cnt}
+                </span>
+              )}
+            </button>
+          )
+        })}
+
+        <div style={{ flex: 1 }} />
+
+        {/* Notifications */}
+        <button onClick={async () => { const p = await Notification.requestPermission(); setNotif(p === "granted") }}
+          title={notif ? "Уведомления включены" : "Включить уведомления"}
+          style={{ width: 44, height: 44, borderRadius: 10, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", color: notif ? "#4ade80" : "rgba(255,255,255,0.3)", transition: "all 0.15s" }}>
+          {notif ? <Bell size={18} /> : <BellOff size={18} />}
+        </button>
+
+        {/* Settings */}
+        <a href="/settings" title="Настройки"
+          style={{ width: 44, height: 44, borderRadius: 10, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", color: "rgba(255,255,255,0.3)", textDecoration: "none", transition: "color 0.15s" }}>
+          <Settings2 size={18} />
+        </a>
+
+        {/* Logout */}
+        <button onClick={logout} title="Выйти"
+          style={{ width: 44, height: 44, borderRadius: 10, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", color: "rgba(255,255,255,0.3)", transition: "color 0.15s", marginBottom: 8 }}>
+          <LogOut size={18} />
+        </button>
+
+        {/* Avatar */}
+        <div title={currentOperator.name}
+          style={{ width: 36, height: 36, borderRadius: "50%", background: color, display: "flex", alignItems: "center", justifyContent: "center", color: "white", fontWeight: 700, fontSize: 14, position: "relative", flexShrink: 0, overflow: "hidden" }}>
+          {currentOperator.avatar
+            ? <img src={currentOperator.avatar} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="" />
+            : currentOperator.name[0].toUpperCase()}
+          <span style={{ position: "absolute", bottom: 1, right: 1, width: 8, height: 8, background: "#4ade80", borderRadius: "50%", border: "1.5px solid #1C1C28" }} />
+        </div>
+      </nav>
+
+      {/* ══════════════════════════════════════
+          SESSION LIST
+      ══════════════════════════════════════ */}
+      <div style={{ width: 280, background: "white", display: "flex", flexDirection: "column", borderRight: "1px solid #EAECF0", flexShrink: 0 }}>
+
+        {/* Header */}
+        <div style={{ padding: "18px 16px 12px", borderBottom: "1px solid #F3F4F6" }}>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+            <h2 style={{ fontWeight: 700, fontSize: 15, color: "#111", margin: 0 }}>
+              {TABS.find(t => t.key === filter)?.label}
+            </h2>
+            {totalUnread > 0 && filter === "waiting" && (
+              <span style={{ background: "#ef4444", color: "white", fontSize: 10, fontWeight: 900, padding: "2px 7px", borderRadius: 99 }}>
+                {totalUnread}
+              </span>
+            )}
+          </div>
+          {/* Search */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#F7F8FA", borderRadius: 10, padding: "8px 12px" }}>
+            <Search size={13} color="#9CA3AF" />
             <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Поиск по клиентам..."
-              className="flex-1 text-xs bg-transparent outline-none text-gray-700 placeholder-gray-300" />
+              placeholder="Поиск..." style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 13, color: "#374151" }} />
           </div>
         </div>
 
-        {/* Status filter tabs */}
-        <div className="flex border-b border-gray-100 shrink-0">
-          {["waiting", "active", "postponed", "closed"].map(s => {
-            const count = sessions.filter(x => x.status === s).length
-            return (
-              <button key={s}
-                onClick={() => { setFilter(s); setActiveId(null); setMessages([]) }}
-                className={cn(
-                  "flex-1 py-2.5 text-[10px] font-bold tracking-wide transition-colors relative",
-                  filter === s ? "text-gray-900 border-b-2" : "text-gray-400 hover:text-gray-600"
-                )}
-                style={filter === s ? { borderBottomColor: color } : {}}>
-                {STATUS_LABELS[s].split("е")[0]}
-                {count > 0 && <span className="absolute -top-0.5 -right-0 w-3.5 h-3.5 rounded-full text-white text-[8px] font-black flex items-center justify-center" style={{ background: color }}>{count > 9 ? "9+" : count}</span>}
-              </button>
-            )
-          })}
-        </div>
-
-        {/* Session list */}
-        <div className="flex-1 overflow-y-auto">
-          {filteredSessions.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-40 gap-2 text-gray-200">
-              <MessageCircle className="h-10 w-10" />
-              <p className="text-xs">Нет чатов</p>
+        {/* List */}
+        <div style={{ flex: 1, overflowY: "auto" }}>
+          {filtered.length === 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 8, color: "#D1D5DB" }}>
+              <Inbox size={32} />
+              <p style={{ fontSize: 13 }}>Пусто</p>
             </div>
-          ) : filteredSessions.map(s => {
-            const lastMsg = s.messages?.[0]
-            const isActive = activeId === s.id
-            const isTakenByMe = s.operatorId === currentOperator.id
-            const isTakenOther = s.operatorId && !isTakenByMe
+          ) : filtered.map(s => {
+            const isSelected = s.id === activeId
+            const lastMsg    = s.messages?.[0]
+            const isTakenMe  = s.operatorId === currentOperator.id
+            const isTakenOt  = s.operatorId && !isTakenMe
             return (
               <button key={s.id}
                 onClick={() => { setActiveId(s.id); fetchMessages(s.id) }}
-                className={cn(
-                  "w-full text-left px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors group",
-                  isActive && "bg-orange-50",
-                  isTakenOther && "opacity-50"
-                )}
-                style={isActive ? { borderLeft: `3px solid ${color}` } : {}}>
-                <div className="flex items-start gap-2.5">
-                  <div className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-white text-xs font-bold relative"
-                    style={{ background: isTakenByMe ? "#16a34a" : isTakenOther ? "#9CA3AF" : color }}>
-                    {(s.visitorName ?? "П")[0].toUpperCase()}
-                    {isTakenByMe && <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full bg-emerald-400 border-2 border-white" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between gap-1">
-                      <p className="text-[13px] font-semibold text-gray-900 truncate">{s.visitorName ?? "Посетитель"}</p>
-                      {(s.unreadCount ?? 0) > 0 && (
-                        <span className="w-4 h-4 rounded-full text-white text-[9px] font-black flex items-center justify-center shrink-0" style={{ background: color }}>
-                          {(s.unreadCount ?? 0) > 9 ? "9+" : s.unreadCount}
-                        </span>
-                      )}
-                    </div>
-                    {lastMsg
-                      ? <p className="text-xs text-gray-400 truncate mt-0.5">{lastMsg.text}</p>
-                      : <p className="text-xs text-gray-300 truncate mt-0.5">Нет сообщений</p>}
-                    <p className="text-[10px] text-gray-300 mt-1">{formatTime(s.updatedAt)}</p>
-                  </div>
+                style={{
+                  width: "100%", textAlign: "left", border: "none", cursor: "pointer",
+                  padding: "12px 16px", background: isSelected ? "#FFF5EF" : "transparent",
+                  borderLeft: isSelected ? `3px solid ${color}` : "3px solid transparent",
+                  transition: "all 0.12s", display: "flex", gap: 10, alignItems: "flex-start",
+                  opacity: isTakenOt ? 0.55 : 1,
+                }}>
+                {/* Avatar */}
+                <div style={{
+                  width: 38, height: 38, borderRadius: "50%", flexShrink: 0,
+                  background: isTakenMe ? "#dcfce7" : "#FFF5EF",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontWeight: 700, fontSize: 14,
+                  color: isTakenMe ? "#16a34a" : color, position: "relative",
+                }}>
+                  {(s.visitorName ?? "П")[0].toUpperCase()}
+                  <span style={{
+                    position: "absolute", bottom: 0, right: 0, width: 10, height: 10, borderRadius: "50%",
+                    border: "2px solid white",
+                  }} className={STATUS_DOT[s.status]} />
                 </div>
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+                    <p style={{ fontWeight: 600, fontSize: 13, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {s.visitorName ?? "Посетитель"}
+                    </p>
+                    <span style={{ fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>{formatTime(s.updatedAt)}</span>
+                  </div>
+                  <p style={{ fontSize: 12, color: "#6B7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>
+                    {lastMsg ? lastMsg.text : "Нет сообщений"}
+                  </p>
+                </div>
+
+                {(s.unreadCount ?? 0) > 0 && (
+                  <span style={{ width: 18, height: 18, borderRadius: 99, background: color, color: "white", fontSize: 9, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
+                    {(s.unreadCount ?? 0) > 9 ? "9+" : s.unreadCount}
+                  </span>
+                )}
               </button>
             )
           })}
         </div>
-      </aside>
+      </div>
 
-      {/* ═══════════════════════════════════
-          MAIN — Chat window
-      ═══════════════════════════════════ */}
-      <main className="flex-1 flex flex-col min-w-0" style={{ height: "100vh" }}>
+      {/* ══════════════════════════════════════
+          CHAT AREA
+      ══════════════════════════════════════ */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
         {!activeId ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 text-gray-200">
-            <div className="w-20 h-20 rounded-3xl flex items-center justify-center" style={{ background: `${color}15` }}>
-              <MessageCircle className="h-10 w-10" style={{ color }} />
+          /* Empty state */
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, color: "#D1D5DB" }}>
+            <div style={{ width: 72, height: 72, borderRadius: 20, background: "#F9FAFB", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <MessageCircle size={32} color="#E5E7EB" />
             </div>
-            <div className="text-center">
-              <p className="text-base font-semibold text-gray-400">Выберите диалог</p>
-              <p className="text-sm text-gray-300 mt-1">Выберите чат из списка слева</p>
+            <div style={{ textAlign: "center" }}>
+              <p style={{ fontWeight: 600, color: "#9CA3AF", fontSize: 15 }}>Выберите диалог</p>
+              <p style={{ fontSize: 13, color: "#D1D5DB", marginTop: 4 }}>Нажмите на чат в списке слева</p>
             </div>
             {totalUnread > 0 && (
-              <div className="px-4 py-2 rounded-full text-sm font-semibold text-white animate-fade-up" style={{ background: color }}>
-                {totalUnread} непрочитанных
-              </div>
+              <button onClick={() => setFilter("waiting")}
+                style={{ padding: "10px 20px", borderRadius: 12, background: color, color: "white", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer" }}>
+                Посмотреть {totalUnread} непрочитанных
+              </button>
             )}
           </div>
         ) : (
           <>
             {/* Chat header */}
-            <div className="flex items-center justify-between px-6 py-3.5 bg-white border-b border-gray-100 shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-sm shrink-0"
-                  style={{ background: color }}>
-                  {(activeSession?.visitorName ?? "П")[0].toUpperCase()}
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">{activeSession?.visitorName ?? "Посетитель"}</p>
-                  {activeSession?.visitorPage && (
-                    <p className="text-xs text-gray-400 truncate max-w-[280px]">{activeSession.visitorPage}</p>
-                  )}
-                </div>
+            <div style={{ padding: "0 20px", height: 60, background: "white", borderBottom: "1px solid #EAECF0", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+              <div style={{ width: 36, height: 36, borderRadius: "50%", background: "#FFF5EF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 15, color, flexShrink: 0 }}>
+                {(active?.visitorName ?? "П")[0].toUpperCase()}
               </div>
 
-              <div className="flex items-center gap-2">
-                <span className={cn("text-[10px] font-bold px-2.5 py-1 rounded-full", STATUS_COLORS[activeSession?.status ?? "waiting"])}>
-                  {STATUS_LABELS[activeSession?.status ?? "waiting"]}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontWeight: 600, fontSize: 14, color: "#111" }}>{active?.visitorName ?? "Посетитель"}</p>
+                {active?.visitorPage && (
+                  <p style={{ fontSize: 11, color: "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <Globe size={10} style={{ display: "inline", marginRight: 3 }} />{active.visitorPage}
+                  </p>
+                )}
+              </div>
+
+              {/* Status + actions */}
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                {/* Status chip */}
+                <span style={{
+                  fontSize: 11, fontWeight: 600, padding: "3px 10px", borderRadius: 99,
+                  background: active?.status === "active" ? "#dcfce7" : active?.status === "waiting" ? "#fef3c7" : active?.status === "postponed" ? "#dbeafe" : "#F3F4F6",
+                  color: active?.status === "active" ? "#16a34a" : active?.status === "waiting" ? "#b45309" : active?.status === "postponed" ? "#1d4ed8" : "#6B7280",
+                }}>
+                  {{ waiting: "Ожидает", active: "Активный", postponed: "Отложен", closed: "Закрыт" }[active?.status ?? "waiting"]}
                 </span>
 
                 {takenByOther && takenByOp && (
-                  <span className="text-xs text-gray-400 bg-gray-50 px-2.5 py-1 rounded-full border border-gray-100">
+                  <span style={{ fontSize: 11, color: "#9CA3AF", background: "#F9FAFB", padding: "3px 8px", borderRadius: 8, border: "1px solid #E5E7EB" }}>
                     Взял {takenByOp.name}
                   </span>
                 )}
 
-                {(activeSession?.status === "waiting" || (activeSession?.status === "active" && !activeSession.operatorId)) && !takenByOther && (
+                {(active?.status === "waiting" || (active?.status === "active" && !active.operatorId)) && !takenByOther && (
                   <button onClick={accept}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-white transition-all hover:opacity-90 active:scale-95"
-                    style={{ background: "#16a34a" }}>
-                    Принять диалог <ChevronRight className="h-3.5 w-3.5" />
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 10, background: "#16a34a", color: "white", fontWeight: 600, fontSize: 12, border: "none", cursor: "pointer" }}>
+                    Принять <ChevronRight size={14} />
                   </button>
                 )}
 
-                {isMine && activeSession?.status !== "closed" && (
+                {isMine && active?.status !== "closed" && (
                   <>
                     <button onClick={postpone}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-blue-600 hover:bg-blue-50 border border-blue-100 transition-colors">
-                      <Clock className="h-3.5 w-3.5" /> 5 мин
+                      style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10, border: "1px solid #BFDBFE", background: "transparent", color: "#2563eb", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+                      <Clock size={13} /> 5 мин
                     </button>
                     <button onClick={close}
-                      className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-red-500 hover:bg-red-50 border border-red-100 transition-colors">
-                      <XCircle className="h-3.5 w-3.5" /> Закрыть
+                      style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10, border: "1px solid #FECACA", background: "transparent", color: "#dc2626", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+                      <XCircle size={13} /> Закрыть
                     </button>
                   </>
                 )}
 
-                {activeSession?.status === "closed" && (
+                {active?.status === "closed" && (
                   <button onClick={reopen}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-emerald-600 hover:bg-emerald-50 border border-emerald-100 transition-colors">
-                    <RotateCcw className="h-3.5 w-3.5" /> Открыть
+                    style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10, border: "1px solid #BBF7D0", background: "transparent", color: "#16a34a", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>
+                    <RotateCcw size={13} /> Открыть
                   </button>
                 )}
+
+                <button onClick={() => setShowInfo(v => !v)}
+                  style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E5E7EB", background: showInfo ? "#F9FAFB" : "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7280" }}>
+                  <User size={15} />
+                </button>
               </div>
             </div>
 
-            {/* Messages area */}
-            <div className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-1" style={{ background: "#F8F9FA" }}>
-              {grouped.map(group => (
-                <div key={group.date}>
-                  <div className="flex items-center justify-center my-4">
-                    <span className="text-[11px] text-gray-400 bg-white px-3 py-1 rounded-full border border-gray-100 font-medium">
-                      {group.date}
-                    </span>
-                  </div>
-                  {group.messages.map((m, i) => {
-                    const isOp = m.sender === "operator"
-                    const showAvatar = !isOp && (i === 0 || group.messages[i - 1]?.sender !== m.sender)
-                    return (
-                      <div key={m.id} className={cn("flex items-end gap-2 mb-1", isOp ? "justify-end" : "justify-start")}>
-                        {!isOp && (
-                          <div className={cn("w-7 h-7 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0", showAvatar ? "opacity-100" : "opacity-0")}
-                            style={{ background: color }}>
-                            {(activeSession?.visitorName ?? "П")[0].toUpperCase()}
-                          </div>
-                        )}
-                        <div className="flex flex-col gap-0.5" style={{ maxWidth: "68%" }}>
-                          <div style={{
-                            padding: "10px 14px",
-                            borderRadius: isOp ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-                            background: isOp ? color : "#FFFFFF",
-                            color: isOp ? "#fff" : "#111",
-                            fontSize: 14,
-                            lineHeight: 1.55,
-                            boxShadow: "0 1px 2px rgba(0,0,0,0.06)",
-                          }}>
-                            {m.text}
-                          </div>
-                          <div className={cn("flex items-center gap-1", isOp ? "justify-end" : "justify-start")}>
-                            <span className="text-[10px] text-gray-400">{formatTime(m.createdAt)}</span>
-                            {isOp && (m.isRead
-                              ? <CheckCheck className="h-3 w-3 text-blue-400" />
-                              : <Check className="h-3 w-3 text-gray-300" />)}
-                          </div>
-                        </div>
+            <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
+              {/* Messages */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                <div style={{ flex: 1, overflowY: "auto", padding: "20px 24px", display: "flex", flexDirection: "column", gap: 2, background: "#F8F9FA" }}>
+                  {grouped.map(group => (
+                    <div key={group.date}>
+                      <div style={{ display: "flex", justifyContent: "center", margin: "16px 0 12px" }}>
+                        <span style={{ fontSize: 11, color: "#9CA3AF", background: "white", padding: "4px 14px", borderRadius: 99, border: "1px solid #E5E7EB", fontWeight: 500, boxShadow: "0 1px 2px rgba(0,0,0,0.04)" }}>
+                          {group.date}
+                        </span>
                       </div>
-                    )
-                  })}
+                      {group.msgs.map((m, i) => {
+                        const isOp  = m.sender === "operator"
+                        const prev  = group.msgs[i - 1]
+                        const showAv = !isOp && (!prev || prev.sender !== m.sender)
+                        return (
+                          <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: isOp ? "flex-end" : "flex-start", marginBottom: 6 }}>
+                            <div style={{ display: "flex", alignItems: "flex-end", gap: 8, flexDirection: isOp ? "row-reverse" : "row" }}>
+                              {/* Visitor avatar */}
+                              {!isOp && (
+                                <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#FFF5EF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 11, color, flexShrink: 0, opacity: showAv ? 1 : 0 }}>
+                                  {(active?.visitorName ?? "П")[0].toUpperCase()}
+                                </div>
+                              )}
+                              <div style={{
+                                maxWidth: "64%", padding: "10px 14px",
+                                borderRadius: isOp ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
+                                background: isOp ? color : "white",
+                                color: isOp ? "white" : "#111",
+                                fontSize: 14, lineHeight: 1.55,
+                                boxShadow: "0 1px 3px rgba(0,0,0,0.06)",
+                              }}>
+                                {m.text}
+                              </div>
+                            </div>
+                            <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3, paddingLeft: isOp ? 0 : 36, paddingRight: isOp ? 0 : 0, justifyContent: isOp ? "flex-end" : "flex-start" }}>
+                              <span style={{ fontSize: 10, color: "#9CA3AF" }}>{formatTime(m.createdAt)}</span>
+                              {isOp && (m.isRead
+                                ? <CheckCheck size={12} color="#60A5FA" />
+                                : <Check size={12} color="#9CA3AF" />)}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  ))}
+                  {messages.length === 0 && (
+                    <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: "#D1D5DB", fontSize: 13 }}>
+                      Нет сообщений
+                    </div>
+                  )}
+                  <div ref={bottomRef} />
                 </div>
-              ))}
-              {messages.length === 0 && (
-                <div className="flex-1 flex items-center justify-center">
-                  <p className="text-sm text-gray-300">Нет сообщений</p>
+
+                {/* Quick replies */}
+                {quickReplies.length > 0 && canWrite && (
+                  <div style={{ padding: "8px 16px", display: "flex", gap: 6, flexWrap: "wrap", background: "white", borderTop: "1px solid #F3F4F6" }}>
+                    <span style={{ fontSize: 11, color: "#9CA3AF", display: "flex", alignItems: "center", gap: 4, marginRight: 4 }}>
+                      <Zap size={11} color={color} /> Быстрые ответы:
+                    </span>
+                    {quickReplies.map((qr, i) => (
+                      <button key={i} onClick={() => send(qr)}
+                        style={{ padding: "5px 12px", borderRadius: 99, border: `1px solid #E5E7EB`, background: "transparent", color: "#374151", fontSize: 12, fontWeight: 500, cursor: "pointer", transition: "all 0.12s" }}>
+                        {qr}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Input */}
+                {active?.status === "closed" ? (
+                  <div style={{ padding: "16px 20px", background: "white", borderTop: "1px solid #F3F4F6", display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
+                    <p style={{ fontSize: 13, color: "#9CA3AF" }}>Чат закрыт</p>
+                    <button onClick={reopen}
+                      style={{ padding: "7px 14px", borderRadius: 10, background: "#f0fdf4", color: "#16a34a", fontWeight: 600, fontSize: 12, border: "1px solid #BBF7D0", cursor: "pointer" }}>
+                      Открыть снова
+                    </button>
+                  </div>
+                ) : active?.status === "postponed" ? (
+                  <div style={{ padding: "16px 20px", background: "#EFF6FF", borderTop: "1px solid #BFDBFE", display: "flex", alignItems: "center", gap: 8 }}>
+                    <Clock size={15} color="#3B82F6" />
+                    <p style={{ fontSize: 13, color: "#1D4ED8" }}>Диалог отложен на 5 минут</p>
+                  </div>
+                ) : canWrite ? (
+                  <div style={{ padding: "12px 16px", background: "white", borderTop: "1px solid #F3F4F6" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#F8F9FA", borderRadius: 14, padding: "8px 8px 8px 16px", border: "1.5px solid #E5E7EB" }}>
+                      <input
+                        ref={inputRef}
+                        value={input}
+                        onChange={e => setInput(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input) } }}
+                        placeholder={active?.status === "waiting" && !isMine ? "Сначала примите диалог..." : "Напишите ответ... (Enter — отправить)"}
+                        disabled={active?.status === "waiting" && !isMine}
+                        style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 14, color: "#111" }}
+                      />
+                      <button onClick={() => send(input)} disabled={!input.trim() || sending}
+                        style={{
+                          width: 36, height: 36, borderRadius: 10, border: "none", cursor: "pointer",
+                          background: input.trim() ? color : "#E5E7EB",
+                          display: "flex", alignItems: "center", justifyContent: "center",
+                          transition: "all 0.15s", flexShrink: 0,
+                        }}>
+                        {sending
+                          ? <div style={{ width: 14, height: 14, border: "2px solid rgba(255,255,255,0.3)", borderTopColor: "white", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+                          : <Send size={15} color={input.trim() ? "white" : "#9CA3AF"} />}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+
+              {/* ── Info panel ── */}
+              {showInfo && active && (
+                <div style={{ width: 240, background: "white", borderLeft: "1px solid #EAECF0", padding: "20px 16px", overflowY: "auto", flexShrink: 0 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#9CA3AF", marginBottom: 14 }}>Посетитель</p>
+
+                  <InfoRow icon={<User size={13} />} label="Имя" value={active.visitorName ?? "—"} />
+                  <InfoRow icon={<Globe size={13} />} label="Страница" value={active.visitorPage ?? "—"} truncate />
+                  <InfoRow icon={<Clock size={13} />} label="Начало" value={formatTime(active.createdAt)} />
+                  <InfoRow icon={<Hash size={13} />} label="ID сессии" value={active.id.slice(0, 8) + "…"} mono />
+
+                  <div style={{ margin: "20px 0", height: 1, background: "#F3F4F6" }} />
+
+                  <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#9CA3AF", marginBottom: 14 }}>Оператор</p>
+                  {active.operatorId ? (
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                      <div style={{ width: 28, height: 28, borderRadius: "50%", background: "#FFF5EF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 11, color }}>
+                        {(operators.find(o => o.id === active.operatorId)?.name ?? "О")[0].toUpperCase()}
+                      </div>
+                      <div>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: "#111" }}>{operators.find(o => o.id === active.operatorId)?.name ?? "—"}</p>
+                        <p style={{ fontSize: 10, color: "#9CA3AF" }}>{isMine ? "Это вы" : "Другой оператор"}</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <p style={{ fontSize: 12, color: "#9CA3AF" }}>Не назначен</p>
+                  )}
+
+                  <div style={{ margin: "20px 0", height: 1, background: "#F3F4F6" }} />
+
+                  <p style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: "#9CA3AF", marginBottom: 12 }}>Сообщений</p>
+                  <p style={{ fontSize: 24, fontWeight: 800, color: "#111" }}>{messages.length}</p>
                 </div>
               )}
-              <div ref={bottomRef} />
             </div>
-
-            {/* Quick replies */}
-            {quickReplies.length > 0 && canWrite && (
-              <div className="flex gap-2 flex-wrap px-5 py-2.5 bg-white border-t border-gray-100 shrink-0">
-                {quickReplies.map((qr, i) => (
-                  <button key={i} onClick={() => sendMessage(qr)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border border-gray-200 text-gray-600 hover:border-gray-400 transition-colors">
-                    <Zap className="h-3 w-3" style={{ color }} />
-                    {qr}
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {/* Input */}
-            {activeSession?.status === "closed" ? (
-              <div className="flex items-center justify-center gap-3 px-5 py-4 bg-white border-t border-gray-100 shrink-0">
-                <p className="text-sm text-gray-400">Чат закрыт</p>
-                <button onClick={reopen}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold text-emerald-600 bg-emerald-50 hover:bg-emerald-100 transition-colors">
-                  <RotateCcw className="h-3.5 w-3.5" /> Открыть заново
-                </button>
-              </div>
-            ) : activeSession?.status === "postponed" ? (
-              <div className="flex items-center justify-center gap-2 px-5 py-4 bg-blue-50 border-t border-blue-100 shrink-0">
-                <Clock className="h-4 w-4 text-blue-400" />
-                <p className="text-sm text-blue-500">Диалог отложен на 5 минут</p>
-              </div>
-            ) : canWrite ? (
-              <div className="flex items-center gap-3 px-5 py-3.5 bg-white border-t border-gray-100 shrink-0">
-                <input
-                  ref={inputRef}
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendMessage(input) } }}
-                  placeholder={activeSession?.status === "waiting" ? "Примите диалог чтобы ответить..." : "Напишите ответ..."}
-                  disabled={activeSession?.status === "waiting" && !isMine}
-                  className="flex-1 px-4 py-2.5 rounded-2xl border border-gray-200 bg-gray-50 text-sm outline-none focus:border-gray-400 focus:bg-white transition-all placeholder-gray-300 disabled:opacity-50"
-                />
-                <button onClick={() => sendMessage(input)} disabled={!input.trim() || sending}
-                  className="w-10 h-10 rounded-2xl flex items-center justify-center text-white shrink-0 transition-all active:scale-90 disabled:opacity-40"
-                  style={{ background: color }}>
-                  {sending ? <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Send className="h-4 w-4" />}
-                </button>
-              </div>
-            ) : null}
           </>
         )}
-      </main>
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  )
+}
+
+function InfoRow({ icon, label, value, truncate, mono }: { icon: React.ReactNode; label: string; value: string; truncate?: boolean; mono?: boolean }) {
+  return (
+    <div style={{ display: "flex", alignItems: "flex-start", gap: 8, marginBottom: 10 }}>
+      <span style={{ color: "#9CA3AF", marginTop: 1, flexShrink: 0 }}>{icon}</span>
+      <div style={{ minWidth: 0 }}>
+        <p style={{ fontSize: 10, color: "#9CA3AF", marginBottom: 1 }}>{label}</p>
+        <p style={{ fontSize: 12, color: "#374151", fontWeight: 500, fontFamily: mono ? "monospace" : "inherit", overflow: truncate ? "hidden" : "visible", textOverflow: "ellipsis", whiteSpace: truncate ? "nowrap" : "normal" }}>
+          {value}
+        </p>
+      </div>
     </div>
   )
 }
