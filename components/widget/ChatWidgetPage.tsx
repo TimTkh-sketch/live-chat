@@ -34,6 +34,7 @@ export function ChatWidgetPage() {
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
   const [visitorName, setVisitorName] = useState("")
+  const [visitorPhone, setVisitorPhone] = useState("")
   const [showNameForm, setShowNameForm] = useState(false)
   const [nameSubmitted, setNameSubmitted] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
@@ -113,11 +114,11 @@ export function ChatWidgetPage() {
     return s.id as string
   }
 
-  async function updateVisitorName(name: string, sid: string) {
+  async function updateVisitorInfo(name: string, phone: string, sid: string) {
     await fetch(`/api/session/${sid}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ visitorName: name }),
+      body: JSON.stringify({ visitorName: name, visitorPhone: phone || undefined }),
     })
   }
 
@@ -169,7 +170,7 @@ export function ChatWidgetPage() {
     setConsentGiven(true)
     let sid = sessionId
     if (!sid) sid = await createSession()
-    if (sid && visitorName) await updateVisitorName(visitorName, sid)
+    if (sid && visitorName) await updateVisitorInfo(visitorName, visitorPhone, sid)
     setNameSubmitted(true)
     setShowNameForm(false)
     inputRef.current?.focus()
@@ -460,6 +461,21 @@ export function ChatWidgetPage() {
               onChange={e => setVisitorName(e.target.value)}
               onKeyDown={e => e.key === "Enter" && submitName()}
               placeholder="Ваше имя"
+              style={{
+                width: "100%", padding: "14px 16px",
+                borderRadius: 14, border: "1.5px solid #E5E7EB",
+                fontSize: 16, outline: "none",
+                marginBottom: 10,
+                boxSizing: "border-box",
+                color: "#111",
+              }}
+            />
+            <input
+              value={visitorPhone}
+              onChange={e => setVisitorPhone(e.target.value)}
+              onKeyDown={e => e.key === "Enter" && submitName()}
+              placeholder="Телефон (необязательно)"
+              type="tel"
               style={{
                 width: "100%", padding: "14px 16px",
                 borderRadius: 14, border: "1.5px solid #E5E7EB",

@@ -62,6 +62,7 @@ model ChatSession {
   visitorId    String  @default(cuid())
   visitorName  String?
   visitorEmail String?
+  visitorPhone String?
   visitorPage  String?
 
   channel    String  @default("web")
