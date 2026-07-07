@@ -7,6 +7,7 @@ interface Message { id: string; sender: string; text: string; attachmentUrl?: st
 interface Settings {
   greeting: string; primaryColor: string; quickReplies: string[]
   operatorName: string; operatorAvatar: string | null; offlineText: string
+  privacyPolicyUrl: string
 }
 interface Operator { id: string; name: string; avatar: string | null; isOnline: boolean }
 
@@ -37,6 +38,8 @@ export function ChatWidgetPage() {
   const [nameSubmitted, setNameSubmitted] = useState(false)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [uploadingFile, setUploadingFile] = useState(false)
+  const [consentGiven, setConsentGiven] = useState(false)
+  const [consentChecked, setConsentChecked] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLInputElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -45,6 +48,8 @@ export function ChatWidgetPage() {
   const token = typeof window !== "undefined"
     ? new URLSearchParams(window.location.search).get("token") ?? (window.parent as Window & { __lc_token?: string }).__lc_token ?? null
     : null
+
+  const CONSENT_KEY = token ? `lc_consent_${token}` : null
 
   const primaryColor = settings?.primaryColor ?? "#F26522"
   const anyOnline    = operators.some(o => o.isOnline)
@@ -62,7 +67,9 @@ export function ChatWidgetPage() {
 
     const sid = localStorage.getItem(SESSION_KEY + "_" + token)
     if (sid) setSessionId(sid)
-  }, [token])
+
+    if (CONSENT_KEY && localStorage.getItem(CONSENT_KEY) === "1") setConsentGiven(true)
+  }, [token, CONSENT_KEY])
 
   const fetchMessages = useCallback(async (sid: string) => {
     const r = await fetch(`/api/messages?sessionId=${sid}`)
@@ -127,7 +134,7 @@ export function ChatWidgetPage() {
       const sid = await ensureSession()
       if (!sid) return
 
-      if (!nameSubmitted && !visitorName) {
+      if (!consentGiven || (!nameSubmitted && !visitorName)) {
         setShowNameForm(true)
         setSending(false)
         return
@@ -157,7 +164,9 @@ export function ChatWidgetPage() {
   }
 
   async function submitName() {
-    if (!visitorName.trim()) return
+    if (!visitorName.trim() || !consentChecked) return
+    if (CONSENT_KEY) localStorage.setItem(CONSENT_KEY, "1")
+    setConsentGiven(true)
     let sid = sessionId
     if (!sid) sid = await createSession()
     if (sid && visitorName) await updateVisitorName(visitorName, sid)
@@ -455,19 +464,52 @@ export function ChatWidgetPage() {
                 width: "100%", padding: "14px 16px",
                 borderRadius: 14, border: "1.5px solid #E5E7EB",
                 fontSize: 16, outline: "none",
-                marginBottom: 14,
+                marginBottom: 16,
                 boxSizing: "border-box",
                 color: "#111",
               }}
             />
+
+            {/* ── Privacy consent ── */}
+            <label style={{ display: "flex", alignItems: "flex-start", gap: 10, marginBottom: 16, cursor: "pointer" }}>
+              <div
+                onClick={() => setConsentChecked(p => !p)}
+                style={{
+                  width: 20, height: 20, borderRadius: 6, flexShrink: 0, marginTop: 1,
+                  border: `2px solid ${consentChecked ? primaryColor : "#D1D5DB"}`,
+                  background: consentChecked ? primaryColor : "white",
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  transition: "all 0.15s",
+                }}>
+                {consentChecked && (
+                  <svg width="11" height="9" viewBox="0 0 11 9" fill="none">
+                    <path d="M1 4L4 7L10 1" stroke="white" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                )}
+              </div>
+              <span style={{ fontSize: 13, color: "#6B7280", lineHeight: 1.5 }}>
+                Я соглашаюсь на обработку персональных данных в соответствии с{" "}
+                {settings?.privacyPolicyUrl ? (
+                  <a href={settings.privacyPolicyUrl} target="_blank" rel="noopener noreferrer"
+                    style={{ color: primaryColor, textDecoration: "underline" }}
+                    onClick={e => e.stopPropagation()}>
+                    политикой конфиденциальности
+                  </a>
+                ) : "политикой конфиденциальности"}
+              </span>
+            </label>
+
             <button onClick={submitName}
+              disabled={!consentChecked || !visitorName.trim()}
               style={{
                 width: "100%", padding: "15px",
                 borderRadius: 14,
-                background: primaryColor, color: "white",
+                background: consentChecked && visitorName.trim() ? primaryColor : "#E5E7EB",
+                color: consentChecked && visitorName.trim() ? "white" : "#9CA3AF",
                 fontWeight: 700, fontSize: 16,
-                border: "none", cursor: "pointer",
+                border: "none", cursor: consentChecked && visitorName.trim() ? "pointer" : "default",
                 WebkitTapHighlightColor: "transparent",
+                transition: "background 0.2s",
               }}>
               Начать чат
             </button>

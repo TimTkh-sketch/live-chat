@@ -23,12 +23,13 @@ model WorkspaceSettings {
   workspaceId String    @unique
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
-  greeting       String   @default("Здравствуйте! Чем могу помочь?")
-  offlineText    String   @default("Мы сейчас офлайн. Оставьте сообщение — ответим в рабочее время.")
-  primaryColor   String   @default("#F26522")
-  quickReplies   String[] @default([])
-  operatorName   String   @default("Поддержка")
-  operatorAvatar String?
+  greeting          String   @default("Здравствуйте! Чем могу помочь?")
+  offlineText       String   @default("Мы сейчас офлайн. Оставьте сообщение — ответим в рабочее время.")
+  primaryColor      String   @default("#F26522")
+  quickReplies      String[] @default([])
+  operatorName      String   @default("Поддержка")
+  operatorAvatar    String?
+  privacyPolicyUrl  String   @default("")
 }
 
 model Operator {
