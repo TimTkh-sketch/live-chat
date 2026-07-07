@@ -5,8 +5,9 @@
   if (LC._loaded) return
   LC._loaded = true
 
-  var token   = d.currentScript ? d.currentScript.getAttribute("data-token") : null
-  var baseUrl = d.currentScript ? (d.currentScript.getAttribute("data-url") || d.currentScript.src.replace("/chat.js", "")) : ""
+  var scriptEl = d.currentScript || d.querySelector('script[src*="chat.js"]')
+  var token    = scriptEl ? scriptEl.getAttribute("data-token") : null
+  var baseUrl  = scriptEl ? (scriptEl.getAttribute("data-url") || scriptEl.src.replace(/\/chat\.js.*$/, "")) : ""
 
   if (!token) { console.warn("[LiveChat] data-token не указан"); return }
 
