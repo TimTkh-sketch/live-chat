@@ -83,7 +83,9 @@ export async function POST(req: NextRequest) {
   // Operator replied via VK app
   // VK sends message_reply with object = message directly (no .message wrapper)
   if (body.type === "message_reply") {
+    console.log("[VK] message_reply raw:", JSON.stringify(body.object).slice(0, 300))
     const msg = body.object?.message ?? body.object
+    console.log("[VK] message_reply msg:", JSON.stringify(msg).slice(0, 200))
     if (!msg?.text) return new NextResponse("ok")
 
     const userId = String(msg.peer_id)
