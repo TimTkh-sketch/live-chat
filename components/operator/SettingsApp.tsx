@@ -764,7 +764,7 @@ function ChannelsTab({ ios, inputStyle }: { ios: Record<string, string> | null; 
       if (data.ok) {
         // Get webhook info to confirm
         const info = await fetch("/api/telegram/setup").then(r => r.json())
-        setTgStatus({ ok: true, username: info.bot?.username, url: info.webhook?.result?.url })
+        setTgStatus({ ok: true, username: info.bot?.username ?? data.username })
       } else {
         setTgStatus({ ok: false })
       }
