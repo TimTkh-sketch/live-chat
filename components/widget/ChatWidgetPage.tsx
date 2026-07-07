@@ -1,9 +1,9 @@
 "use client"
 
 import { useState, useEffect, useRef, useCallback } from "react"
-import { X, Send, Smile, Paperclip, ChevronDown } from "lucide-react"
+import { Send, ChevronDown, Paperclip, Smile } from "lucide-react"
 
-interface Message { id: string; sender: string; text: string; createdAt: string }
+interface Message { id: string; sender: string; text: string; attachmentUrl?: string; createdAt: string }
 interface Settings {
   greeting: string; primaryColor: string; quickReplies: string[]
   operatorName: string; operatorAvatar: string | null; offlineText: string
@@ -35,8 +35,12 @@ export function ChatWidgetPage() {
   const [visitorName, setVisitorName] = useState("")
   const [showNameForm, setShowNameForm] = useState(false)
   const [nameSubmitted, setNameSubmitted] = useState(false)
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [uploadingFile, setUploadingFile] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLInputElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const messagesRef = useRef<HTMLDivElement>(null)
 
   const token = typeof window !== "undefined"
     ? new URLSearchParams(window.location.search).get("token") ?? (window.parent as Window & { __lc_token?: string }).__lc_token ?? null
@@ -46,7 +50,6 @@ export function ChatWidgetPage() {
   const anyOnline    = operators.some(o => o.isOnline)
   const onlineOp     = operators.find(o => o.isOnline)
 
-  /* ── Load settings + session ── */
   useEffect(() => {
     if (!token) return
     fetch(`/api/workspace/settings?token=${token}`)
@@ -61,7 +64,6 @@ export function ChatWidgetPage() {
     if (sid) setSessionId(sid)
   }, [token])
 
-  /* ── Poll messages ── */
   const fetchMessages = useCallback(async (sid: string) => {
     const r = await fetch(`/api/messages?sessionId=${sid}`)
     const data = await r.json()
@@ -75,7 +77,20 @@ export function ChatWidgetPage() {
     return () => clearInterval(t)
   }, [sessionId, fetchMessages])
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }) }, [messages.length])
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+  }, [messages.length])
+
+  // Keep input visible when keyboard opens on mobile
+  useEffect(() => {
+    const handler = () => {
+      setTimeout(() => {
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" })
+      }, 100)
+    }
+    inputRef.current?.addEventListener("focus", handler)
+    return () => inputRef.current?.removeEventListener("focus", handler)
+  }, [])
 
   async function createSession() {
     if (!token) return null
@@ -99,12 +114,17 @@ export function ChatWidgetPage() {
     })
   }
 
-  async function sendMessage(text: string) {
-    if (!text.trim() || sending) return
+  async function ensureSession() {
+    let sid = sessionId
+    if (!sid) sid = await createSession()
+    return sid
+  }
+
+  async function sendMessage(text: string, attachmentUrl?: string) {
+    if ((!text.trim() && !attachmentUrl) || sending) return
     setSending(true)
     try {
-      let sid = sessionId
-      if (!sid) sid = await createSession()
+      const sid = await ensureSession()
       if (!sid) return
 
       if (!nameSubmitted && !visitorName) {
@@ -113,16 +133,27 @@ export function ChatWidgetPage() {
         return
       }
 
-      setMessages(prev => [...prev, { id: "tmp_" + Date.now(), sender: "visitor", text, createdAt: new Date().toISOString() }])
+      setMessages(prev => [...prev, { id: "tmp_" + Date.now(), sender: "visitor", text, attachmentUrl, createdAt: new Date().toISOString() }])
       setInput("")
 
       await fetch("/api/messages", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId: sid, text, sender: "visitor" }),
+        body: JSON.stringify({ sessionId: sid, text, sender: "visitor", attachmentUrl }),
       })
       await fetchMessages(sid)
     } finally { setSending(false) }
+  }
+
+  async function handleFileUpload(file: File) {
+    setUploadingFile(true)
+    try {
+      const form = new FormData()
+      form.append("file", file)
+      const r = await fetch("/api/upload", { method: "POST", body: form })
+      const data = await r.json()
+      if (data.url) await sendMessage("", data.url)
+    } finally { setUploadingFile(false) }
   }
 
   async function submitName() {
@@ -135,7 +166,6 @@ export function ChatWidgetPage() {
     inputRef.current?.focus()
   }
 
-  /* ── Group messages by date ── */
   const grouped: { date: string; messages: Message[] }[] = []
   const allMessages = settings
     ? [{ id: "__greeting__", sender: "operator", text: settings.greeting, createdAt: new Date().toISOString() }, ...messages]
@@ -150,183 +180,300 @@ export function ChatWidgetPage() {
 
   if (!settings) {
     return (
-      <div className="h-screen flex items-center justify-center">
+      <div style={{ position: "fixed", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", background: "#fff" }}>
         <div style={{ width: 24, height: 24, border: "2px solid #F26522", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
       </div>
     )
   }
 
   return (
-    <div style={{ height: "100vh", display: "flex", flexDirection: "column", background: "#fff", position: "relative" }}>
+    <>
+      <style>{`
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; }
+        @supports (height: 100dvh) { .lc-root { height: 100dvh !important; } }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        .lc-msg { animation: fadeUp 0.18s ease; }
+        .lc-qr:active { opacity: 0.7; transform: scale(0.97); }
+        .lc-send:active { transform: scale(0.92); }
+        ::-webkit-scrollbar { width: 0; }
+      `}</style>
 
-      {/* Header */}
-      <div style={{
-        background: `linear-gradient(135deg, ${primaryColor}, ${primaryColor}CC)`,
-        padding: "16px",
+      <div className="lc-root" style={{
+        position: "fixed",
+        inset: 0,
+        height: "100vh",
         display: "flex",
-        alignItems: "center",
-        gap: "12px",
-        flexShrink: 0,
-        position: "relative",
-        overflow: "hidden",
+        flexDirection: "column",
+        background: "#F8F9FB",
+        fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
+        WebkitFontSmoothing: "antialiased",
       }}>
-        {/* Decorative dots */}
-        {[...Array(8)].map((_, i) => (
-          <div key={i} style={{
-            position: "absolute",
-            width: 6, height: 6,
-            borderRadius: "50%",
-            background: "rgba(255,255,255,0.2)",
-            top: `${10 + i * 8}%`,
-            right: `${5 + i * 10}%`,
-          }} />
-        ))}
 
-        {/* Avatar */}
+        {/* ── Header ── */}
         <div style={{
-          width: 40, height: 40, borderRadius: "50%",
-          background: "rgba(255,255,255,0.2)",
-          border: "2px solid rgba(255,255,255,0.4)",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          color: "white", fontWeight: 700, fontSize: 16,
-          overflow: "hidden", flexShrink: 0,
+          background: `linear-gradient(135deg, ${primaryColor} 0%, ${primaryColor}DD 100%)`,
+          padding: "14px 16px",
+          paddingTop: "calc(14px + env(safe-area-inset-top, 0px))",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexShrink: 0,
+          boxShadow: "0 2px 12px rgba(0,0,0,0.15)",
+          position: "relative",
+          zIndex: 1,
         }}>
-          {onlineOp?.avatar
-            ? <img src={onlineOp.avatar} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="" />
-            : (settings.operatorName || "П")[0].toUpperCase()}
-        </div>
+          <div style={{
+            width: 42, height: 42, borderRadius: "50%",
+            background: "rgba(255,255,255,0.2)",
+            border: "2px solid rgba(255,255,255,0.45)",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            color: "white", fontWeight: 700, fontSize: 17,
+            overflow: "hidden", flexShrink: 0,
+          }}>
+            {onlineOp?.avatar
+              ? <img src={onlineOp.avatar} style={{ width: "100%", height: "100%", objectFit: "cover" }} alt="" />
+              : (settings.operatorName || "П")[0].toUpperCase()}
+          </div>
 
-        <div style={{ flex: 1 }}>
-          <p style={{ color: "white", fontWeight: 700, fontSize: 15, lineHeight: 1.2 }}>
-            {settings.operatorName}
-          </p>
-          <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 2 }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: anyOnline ? "#4ade80" : "#9CA3AF" }} />
-            <p style={{ color: "rgba(255,255,255,0.8)", fontSize: 12 }}>
-              {anyOnline ? "Операторы онлайн!" : "Офлайн"}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{ color: "white", fontWeight: 700, fontSize: 15, lineHeight: 1.2, margin: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              {settings.operatorName}
             </p>
-          </div>
-        </div>
-
-        <button
-          onClick={() => window.parent.postMessage({ type: "lc:close" }, "*")}
-          style={{ width: 28, height: 28, borderRadius: "50%", background: "rgba(255,255,255,0.15)", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "white", flexShrink: 0 }}>
-          <ChevronDown size={16} />
-        </button>
-      </div>
-
-      {/* Messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 2, background: "#fafafa" }}>
-        {grouped.map(group => (
-          <div key={group.date}>
-            <div style={{ display: "flex", justifyContent: "center", margin: "12px 0" }}>
-              <span style={{ fontSize: 11, color: "#9CA3AF", background: "white", padding: "3px 12px", borderRadius: 99, border: "1px solid #F3F4F6", fontWeight: 500 }}>
-                {group.date}
-              </span>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, marginTop: 3 }}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: anyOnline ? "#4ade80" : "rgba(255,255,255,0.4)", flexShrink: 0 }} />
+              <p style={{ color: "rgba(255,255,255,0.85)", fontSize: 12, margin: 0 }}>
+                {anyOnline ? "Онлайн" : "Офлайн"}
+              </p>
             </div>
-            {group.messages.map(m => {
-              const isVisitor = m.sender === "visitor"
-              return (
-                <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: isVisitor ? "flex-end" : "flex-start", marginBottom: 4 }}>
-                  <div style={{
-                    maxWidth: "78%",
-                    padding: "10px 14px",
-                    borderRadius: isVisitor ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
-                    background: isVisitor ? primaryColor : "#FFFFFF",
-                    color: isVisitor ? "white" : "#111",
-                    fontSize: 14,
-                    lineHeight: 1.55,
-                    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-                  }}>
-                    {m.text}
-                  </div>
-                  <span style={{ fontSize: 10, color: "#9CA3AF", marginTop: 2, padding: "0 2px" }}>
-                    {formatTime(m.createdAt)}
-                    {isVisitor && " ✓✓"}
-                  </span>
-                </div>
-              )
-            })}
           </div>
-        ))}
-        <div ref={bottomRef} />
+
+          <button
+            onClick={() => window.parent.postMessage({ type: "lc:close" }, "*")}
+            style={{
+              width: 34, height: 34, borderRadius: "50%",
+              background: "rgba(255,255,255,0.18)",
+              border: "none", cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: "white", flexShrink: 0,
+              WebkitTapHighlightColor: "transparent",
+            }}>
+            <ChevronDown size={18} />
+          </button>
+        </div>
+
+        {/* ── Messages ── */}
+        <div ref={messagesRef} style={{ flex: 1, overflowY: "auto", padding: "12px 14px", display: "flex", flexDirection: "column", gap: 2, overscrollBehavior: "contain" }}>
+          {grouped.map(group => (
+            <div key={group.date}>
+              <div style={{ display: "flex", justifyContent: "center", margin: "10px 0" }}>
+                <span style={{ fontSize: 11, color: "#9CA3AF", background: "white", padding: "3px 12px", borderRadius: 99, border: "1px solid #EBEBEB", fontWeight: 500 }}>
+                  {group.date}
+                </span>
+              </div>
+              {group.messages.map(m => {
+                const isVisitor = m.sender === "visitor"
+                return (
+                  <div key={m.id} className="lc-msg" style={{ display: "flex", flexDirection: "column", alignItems: isVisitor ? "flex-end" : "flex-start", marginBottom: 3 }}>
+                    <div style={{
+                      maxWidth: "82%",
+                      padding: m.attachmentUrl && !m.text ? "4px" : "10px 14px",
+                      borderRadius: isVisitor ? "18px 18px 4px 18px" : "18px 18px 18px 4px",
+                      background: isVisitor ? primaryColor : "#FFFFFF",
+                      color: isVisitor ? "white" : "#111",
+                      fontSize: 14,
+                      lineHeight: 1.55,
+                      boxShadow: isVisitor ? `0 2px 8px ${primaryColor}40` : "0 1px 4px rgba(0,0,0,0.08)",
+                      wordBreak: "break-word",
+                      overflow: "hidden",
+                    }}>
+                      {m.attachmentUrl && (
+                        <a href={m.attachmentUrl} target="_blank" rel="noopener noreferrer">
+                          <img src={m.attachmentUrl} alt="attachment"
+                            style={{ display: "block", maxWidth: "100%", maxHeight: 200, borderRadius: 12, objectFit: "cover" }} />
+                        </a>
+                      )}
+                      {m.text && <span>{m.text}</span>}
+                    </div>
+                    <span style={{ fontSize: 10, color: "#B0B7C3", marginTop: 3, padding: "0 3px" }}>
+                      {formatTime(m.createdAt)}{isVisitor && " ✓✓"}
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+          <div ref={bottomRef} style={{ height: 4 }} />
+        </div>
+
+        {/* ── Quick replies ── */}
+        {settings.quickReplies.length > 0 && (
+          <div style={{
+            padding: "8px 12px",
+            display: "flex",
+            gap: 7,
+            overflowX: "auto",
+            flexWrap: "nowrap",
+            borderTop: "1px solid #EBEBEB",
+            background: "white",
+            flexShrink: 0,
+            WebkitOverflowScrolling: "touch",
+          }}>
+            {settings.quickReplies.map((qr, i) => (
+              <button key={i} className="lc-qr" onClick={() => sendMessage(qr)}
+                style={{
+                  padding: "7px 16px",
+                  borderRadius: 99,
+                  border: `1.5px solid ${primaryColor}`,
+                  background: "transparent",
+                  color: primaryColor,
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  whiteSpace: "nowrap",
+                  flexShrink: 0,
+                  WebkitTapHighlightColor: "transparent",
+                  transition: "transform 0.1s",
+                }}>
+                {qr}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* ── Input area ── */}
+        <div style={{
+          background: "white",
+          borderTop: "1px solid #EBEBEB",
+          flexShrink: 0,
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        }}>
+          <div style={{ padding: "10px 12px 8px", display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ flex: 1, display: "flex", alignItems: "center", background: "#F3F4F6", borderRadius: 24, padding: "0 14px", minHeight: 44 }}>
+              <input
+                ref={inputRef}
+                value={input}
+                onChange={e => setInput(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); sendMessage(input) } }}
+                placeholder="Написать сообщение..."
+                style={{
+                  flex: 1,
+                  background: "transparent",
+                  border: "none",
+                  outline: "none",
+                  fontSize: 15,
+                  color: "#111",
+                  padding: "10px 0",
+                  minWidth: 0,
+                }}
+              />
+            </div>
+            <button
+              className="lc-send"
+              onClick={() => sendMessage(input)}
+              disabled={!input.trim() || sending}
+              style={{
+                width: 44, height: 44,
+                borderRadius: "50%",
+                background: input.trim() ? primaryColor : "#E5E7EB",
+                border: "none",
+                cursor: input.trim() ? "pointer" : "default",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                flexShrink: 0,
+                transition: "background 0.2s, transform 0.1s",
+                WebkitTapHighlightColor: "transparent",
+                boxShadow: input.trim() ? `0 3px 10px ${primaryColor}50` : "none",
+              }}>
+              <Send size={17} color={input.trim() ? "white" : "#9CA3AF"} style={{ marginLeft: 1 }} />
+            </button>
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 14, paddingLeft: 18, paddingRight: 12, paddingBottom: 8, position: "relative" }}>
+            <input ref={fileInputRef} type="file" accept="image/*,application/pdf" style={{ display: "none" }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) handleFileUpload(f); e.target.value = "" }} />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingFile}
+              style={{ background: "none", border: "none", cursor: "pointer", color: uploadingFile ? "#E5E7EB" : "#9CA3AF", display: "flex", padding: 4, WebkitTapHighlightColor: "transparent" }}>
+              <Paperclip size={17} />
+            </button>
+            <button
+              onClick={() => setShowEmojiPicker(p => !p)}
+              style={{ background: "none", border: "none", cursor: "pointer", color: showEmojiPicker ? primaryColor : "#9CA3AF", display: "flex", padding: 4, WebkitTapHighlightColor: "transparent" }}>
+              <Smile size={17} />
+            </button>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 10, color: "#D9DCE3", letterSpacing: "0.03em" }}>LiveChat</span>
+
+            {showEmojiPicker && (
+              <div style={{
+                position: "absolute", bottom: "calc(100% + 8px)", left: 8,
+                background: "white", borderRadius: 16,
+                boxShadow: "0 8px 32px rgba(0,0,0,0.15)",
+                padding: "10px 8px", zIndex: 50,
+                display: "grid", gridTemplateColumns: "repeat(8, 1fr)", gap: 2,
+                width: 264,
+              }}>
+                {["😀","😂","😍","🥰","😎","🤔","😅","👍","❤️","🔥","✨","🎉","👋","🙏","💪","😊","😭","🥹","🤣","😘","🙈","💀","👀","💯","⚡","🌟","💬","✅","❌","🎁","🎯","🚀"].map(emoji => (
+                  <button key={emoji}
+                    onClick={() => { setInput(p => p + emoji); setShowEmojiPicker(false); inputRef.current?.focus() }}
+                    style={{ background: "none", border: "none", cursor: "pointer", fontSize: 22, lineHeight: 1, padding: "4px 2px", borderRadius: 8, WebkitTapHighlightColor: "transparent" }}>
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Quick replies */}
-      {settings.quickReplies.length > 0 && (
-        <div style={{ padding: "8px 12px", display: "flex", gap: 8, flexWrap: "wrap", borderTop: "1px solid #F3F4F6", background: "white" }}>
-          {settings.quickReplies.map((qr, i) => (
-            <button key={i} onClick={() => sendMessage(qr)}
-              style={{
-                padding: "6px 14px", borderRadius: 99, border: `1.5px solid ${primaryColor}`,
-                background: "transparent", color: primaryColor, fontSize: 13, fontWeight: 500,
-                cursor: "pointer", transition: "all 0.15s",
-              }}>
-              {qr}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {/* Name form overlay */}
+      {/* ── Name form overlay ── */}
       {showNameForm && (
         <div style={{
-          position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)",
-          display: "flex", alignItems: "center", justifyContent: "center", zIndex: 10, padding: 16,
+          position: "fixed", inset: 0,
+          background: "rgba(0,0,0,0.45)",
+          display: "flex", alignItems: "flex-end",
+          zIndex: 100,
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
         }}>
-          <div style={{ background: "white", borderRadius: 16, padding: 24, width: "100%", maxWidth: 300 }}>
-            <p style={{ fontWeight: 700, fontSize: 16, marginBottom: 6 }}>👋 Представьтесь в чате</p>
-            <p style={{ fontSize: 13, color: "#6B7280", marginBottom: 16 }}>Как вас зовут?</p>
+          <div style={{
+            background: "white",
+            borderRadius: "20px 20px 0 0",
+            padding: "28px 24px",
+            width: "100%",
+            boxShadow: "0 -8px 40px rgba(0,0,0,0.15)",
+          }}>
+            <div style={{ width: 40, height: 4, background: "#E5E7EB", borderRadius: 99, margin: "0 auto 20px" }} />
+            <p style={{ fontWeight: 700, fontSize: 18, marginBottom: 6, color: "#111" }}>Представьтесь</p>
+            <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 20 }}>Как вас зовут? Оператор обратится к вам по имени.</p>
             <input
               autoFocus
               value={visitorName}
               onChange={e => setVisitorName(e.target.value)}
               onKeyDown={e => e.key === "Enter" && submitName()}
               placeholder="Ваше имя"
-              style={{ width: "100%", padding: "10px 14px", borderRadius: 12, border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none", marginBottom: 12 }}
+              style={{
+                width: "100%", padding: "14px 16px",
+                borderRadius: 14, border: "1.5px solid #E5E7EB",
+                fontSize: 16, outline: "none",
+                marginBottom: 14,
+                boxSizing: "border-box",
+                color: "#111",
+              }}
             />
             <button onClick={submitName}
-              style={{ width: "100%", padding: "10px", borderRadius: 12, background: primaryColor, color: "white", fontWeight: 700, fontSize: 14, border: "none", cursor: "pointer" }}>
+              style={{
+                width: "100%", padding: "15px",
+                borderRadius: 14,
+                background: primaryColor, color: "white",
+                fontWeight: 700, fontSize: 16,
+                border: "none", cursor: "pointer",
+                WebkitTapHighlightColor: "transparent",
+              }}>
               Начать чат
             </button>
           </div>
         </div>
       )}
-
-      {/* Input */}
-      <div style={{ padding: "10px 12px", borderTop: "1px solid #F3F4F6", background: "white", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <input
-            ref={inputRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); sendMessage(input) } }}
-            placeholder="Введите сообщение"
-            style={{ flex: 1, padding: "10px 14px", borderRadius: 24, border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none", background: "#FAFAFA" }}
-          />
-          <button onClick={() => sendMessage(input)}
-            disabled={!input.trim() || sending}
-            style={{
-              width: 40, height: 40, borderRadius: "50%",
-              background: input.trim() ? primaryColor : "#E5E7EB",
-              border: "none", cursor: "pointer",
-              display: "flex", alignItems: "center", justifyContent: "center",
-              transition: "all 0.2s", flexShrink: 0,
-            }}>
-            <Send size={16} color={input.trim() ? "white" : "#9CA3AF"} />
-          </button>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, marginTop: 8, paddingLeft: 4 }}>
-          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", display: "flex" }}>
-            <Paperclip size={16} />
-          </button>
-          <button style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", display: "flex" }}>
-            <Smile size={16} />
-          </button>
-          <span style={{ flex: 1 }} />
-          <span style={{ fontSize: 10, color: "#D1D5DB" }}>LiveChat</span>
-        </div>
-      </div>
-    </div>
+    </>
   )
 }

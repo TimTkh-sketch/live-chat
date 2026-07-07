@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { sendPushToWorkspace } from "@/lib/push"
-import { sendTelegram, sendVk } from "@/lib/channels"
+import { sendTelegram, sendVk, sendAvito } from "@/lib/channels"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
@@ -16,10 +16,10 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const { sessionId, text, sender } = await req.json()
-  if (!sessionId || !text || !sender) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
+  const { sessionId, text, sender, attachmentUrl } = await req.json()
+  if (!sessionId || !sender || (!text && !attachmentUrl)) return NextResponse.json({ error: "Missing fields" }, { status: 400 })
 
-  const message = await db.chatMessage.create({ data: { sessionId, text, sender } })
+  const message = await db.chatMessage.create({ data: { sessionId, text: text || "", sender, attachmentUrl } })
 
   await db.chatSession.update({ where: { id: sessionId }, data: { updatedAt: new Date() } })
 
@@ -39,6 +39,8 @@ export async function POST(req: NextRequest) {
         sendTelegram(session.externalId, text).catch(() => {})
       } else if (session.channel === "vk") {
         sendVk(session.externalId, text).catch(() => {})
+      } else if (session.channel === "avito") {
+        sendAvito(session.externalId, text).catch(() => {})
       }
     }
   }
@@ -49,7 +51,7 @@ export async function POST(req: NextRequest) {
       select: { workspaceId: true, visitorName: true, channel: true },
     })
     if (session) {
-      const channelLabel = session.channel === "telegram" ? " (TG)" : session.channel === "vk" ? " (VK)" : ""
+      const channelLabel = session.channel === "telegram" ? " (TG)" : session.channel === "vk" ? " (VK)" : session.channel === "avito" ? " (Авито)" : ""
       const visitorName = (session.visitorName || "Посетитель") + channelLabel
       sendPushToWorkspace(session.workspaceId, {
         title: `💬 ${visitorName}`,

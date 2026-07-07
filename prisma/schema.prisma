@@ -82,10 +82,12 @@ model ChatMessage {
   sessionId String
   session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
-  sender    String
-  text      String
-  isRead    Boolean  @default(false)
-  createdAt DateTime @default(now())
+  sender        String
+  text          String   @default("")
+  attachmentUrl String?
+  isRead        Boolean  @default(false)
+  externalId    String?  @unique
+  createdAt     DateTime @default(now())
 }
 
 model PushSubscription {

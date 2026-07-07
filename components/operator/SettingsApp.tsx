@@ -732,11 +732,19 @@ function ChannelsTab({ ios, inputStyle }: { ios: Record<string, string> | null; 
   const [vkSaved,   setVkSaved]   = useState(false)
   const [vkSaving,  setVkSaving]  = useState(false)
 
+  const [avClientId,     setAvClientId]     = useState("")
+  const [avClientSecret, setAvClientSecret] = useState("")
+  const [avStatus,       setAvStatus]       = useState<{ connected: boolean } | null>(null)
+  const [avSaving,       setAvSaving]       = useState(false)
+
   const dark = !!ios
 
   useEffect(() => {
     fetch("/api/telegram/setup").then(r => r.json()).then(d => {
       if (d.connected) setTgStatus({ ok: true, username: d.username })
+    }).catch(() => {})
+    fetch("/api/channels/avito").then(r => r.json()).then(d => {
+      setAvStatus(d)
     }).catch(() => {})
   }, [])
 
@@ -772,6 +780,24 @@ function ChannelsTab({ ios, inputStyle }: { ios: Record<string, string> | null; 
       setTgStatus({ ok: false })
     } finally {
       setTgLoading(false)
+    }
+  }
+
+  async function connectAvito() {
+    if (!avClientId.trim() || !avClientSecret.trim()) return
+    setAvSaving(true)
+    try {
+      const r = await fetch("/api/channels/avito", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ clientId: avClientId, clientSecret: avClientSecret, userId: "155984990" }),
+      })
+      const data = await r.json()
+      setAvStatus({ connected: !!data.ok })
+    } catch {
+      setAvStatus({ connected: false })
+    } finally {
+      setAvSaving(false)
     }
   }
 
@@ -830,6 +856,39 @@ function ChannelsTab({ ios, inputStyle }: { ios: Record<string, string> | null; 
 
           <button onClick={connectTelegram} disabled={!tgToken.trim() || tgLoading} style={btnStyle("#229ED9", !tgToken.trim())}>
             {tgLoading ? <><Loader size={15} style={{ animation: "spin 0.7s linear infinite" }} /> Подключаю...</> : "Подключить Telegram"}
+          </button>
+        </div>
+      </div>
+
+      {/* ── АВИТО ── */}
+      <p style={{ ...sectionTitle, marginTop: dark ? 28 : 20 }}>Авито</p>
+      <div style={cardStyle}>
+        <div style={{ padding: dark ? "16px" : "0" }}>
+          {!dark && <h3 style={{ fontWeight: 700, fontSize: 14, color: "#111", marginBottom: 18 }}>Авито мессенджер</h3>}
+
+          <label style={labelStyle}>Client ID</label>
+          <input value={avClientId} onChange={e => setAvClientId(e.target.value)}
+            placeholder="8kZ19y66DZ3XVQdmo5Zi"
+            style={{ ...fieldStyle, fontFamily: "monospace" }} />
+
+          <label style={labelStyle}>Client Secret</label>
+          <input value={avClientSecret} onChange={e => setAvClientSecret(e.target.value)}
+            placeholder="Lp5qsypCwmpW4d6inyhI..."
+            style={{ ...fieldStyle, fontFamily: "monospace" }} />
+
+          {avStatus?.connected && (
+            <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 10, background: dark ? "rgba(0,177,64,0.12)" : "#f0fdf4", border: `1px solid ${dark ? "rgba(0,177,64,0.3)" : "#BBF7D0"}`, color: dark ? "#4ade80" : "#16a34a", fontSize: 13 }}>
+              ✓ Авито подключён
+            </div>
+          )}
+          {avStatus && !avStatus.connected && (
+            <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 10, background: dark ? "rgba(255,69,58,0.12)" : "#FEF2F2", border: `1px solid ${dark ? "rgba(255,69,58,0.3)" : "#FECACA"}`, color: dark ? "#FF453A" : "#DC2626", fontSize: 13 }}>
+              Ошибка. Проверь ключи.
+            </div>
+          )}
+
+          <button onClick={connectAvito} disabled={!avClientId.trim() || !avClientSecret.trim() || avSaving} style={btnStyle("#00B140", !avClientId.trim() || !avClientSecret.trim())}>
+            {avSaving ? <><Loader size={15} style={{ animation: "spin 0.7s linear infinite" }} /> Подключаю...</> : "Подключить Авито"}
           </button>
         </div>
       </div>

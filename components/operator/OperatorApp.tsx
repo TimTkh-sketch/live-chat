@@ -5,7 +5,7 @@ import {
   MessageCircle, Send, LogOut, Search, Clock, CheckCheck,
   Check, Zap, XCircle, RotateCcw, ArrowLeft,
   Globe, User, Hash, ChevronRight, Bell, BellOff,
-  Inbox, Activity, Archive, PauseCircle, Settings2,
+  Inbox, Activity, Archive, Settings2,
 } from "lucide-react"
 import { formatTime, formatDate } from "@/lib/utils"
 
@@ -26,15 +26,38 @@ function ChannelBadge({ channel }: { channel?: string }) {
   if (channel === "vk") return (
     <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "#0077FF", color: "white", flexShrink: 0 }}>VK</span>
   )
+  if (channel === "avito") return (
+    <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "#00B140", color: "white", flexShrink: 0 }}>AV</span>
+  )
   return null
 }
 interface ChatSettings { quickReplies: string[]; greeting: string; primaryColor: string; operatorName: string }
 
+function VkIcon({ size = 22, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path fill={color} d="M13.162 18.994c.609 0 .877-.37.866-.927-.022-1.793.812-2.596 1.656-1.686.982 1.055 2.03 2.613 2.617 2.613h2.531c.764 0 1.167-.38.94-.936-.222-.553-1.386-2.044-2.084-2.894-.698-.85-1.576-1.73-.696-3.093 1.065-1.627 2.875-4.583 3.04-5.25.155-.617-.155-.928-.79-.928h-2.531c-.65 0-.912.36-1.06.75-.148.389-1.095 2.815-2.456 4.29-.538.573-.894.563-1.218-.06-.247-.474-.247-1.58-.247-2.353V7.372c0-.643-.15-1.035-.765-1.16a7.52 7.52 0 0 0-1.285-.11c-.884 0-1.574.26-1.987.7-.267.288-.04.432.16.453.54.06 1.051.437 1.075 1.5l.056 1.923c0 .877-.147 1.755-.75 2.04-.604.286-1.395-.056-2.182-1.498-.756-1.403-1.626-3.784-1.636-3.804-.149-.39-.411-.751-1.06-.751H4.83c-.73 0-.92.364-.92.727 0 .39 1.278 4.012 2.81 6.32 1.368 2.06 3.14 3.04 4.82 3.04h1.622z"/>
+    </svg>
+  )
+}
+
+function AvitoIcon({ size = 22, color = "currentColor" }: { size?: number; color?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      {/* Letter A */}
+      <path fill={color} d="M10.5 20H7L12 5l5 15h-3.5l-.8-2.5H11.3L10.5 20zm1.4-5.5h.2L12 12l-.1 2.5z"/>
+      {/* Dot — Avito signature */}
+      <circle cx="17.5" cy="6.5" r="2.8" fill={color}/>
+    </svg>
+  )
+}
+
 const TABS = [
-  { key: "waiting",   label: "Входящие",  icon: Inbox },
-  { key: "active",    label: "Активные",  icon: Activity },
-  { key: "postponed", label: "Отложены",  icon: PauseCircle },
-  { key: "closed",    label: "Архив",     icon: Archive },
+  { key: "waiting",   label: "Входящие",  icon: Inbox,     channel: null },
+  { key: "active",    label: "Активные",  icon: Activity,  channel: null },
+  { key: "vk",        label: "ВКонтакте", icon: VkIcon,    channel: "vk" },
+  { key: "avito",     label: "Авито",     icon: AvitoIcon, channel: "avito" },
+  { key: "closed",    label: "Архив",     icon: Archive,   channel: null },
 ]
 
 const STATUS_LABEL: Record<string, string> = {
@@ -134,7 +157,11 @@ export function OperatorApp({
   }, [])
 
   const fetchSessions = useCallback(async () => {
-    const r = await fetch(`/api/session?workspaceId=${currentOperator.workspaceId}&status=${filter}`)
+    const tab = TABS.find(t => t.key === filter)
+    const url = tab?.channel
+      ? `/api/session?workspaceId=${currentOperator.workspaceId}&channel=${tab.channel}`
+      : `/api/session?workspaceId=${currentOperator.workspaceId}&status=${filter}`
+    const r = await fetch(url)
     const d = await r.json()
     if (Array.isArray(d)) setSessions(d)
   }, [currentOperator.workspaceId, filter])
@@ -338,15 +365,18 @@ export function OperatorApp({
               {TABS.map(tab => {
                 const Icon = tab.icon
                 const isActive = filter === tab.key
+                const tabColor = isActive
+                  ? (tab.key === "vk" ? "#0077FF" : tab.key === "avito" ? "#00B140" : IOS.orange)
+                  : IOS.label3
                 const cnt = tab.key === "waiting" ? totalUnread : 0
                 return (
                   <button key={tab.key}
                     onClick={() => { setFilter(tab.key); setActiveId(null); setMessages([]) }}
-                    style={{ flex: 1, padding: "10px 0 8px", border: "none", background: "transparent", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 3, color: isActive ? IOS.orange : IOS.label3, position: "relative" }}>
-                    <Icon size={22} />
-                    <span style={{ fontSize: 10, fontWeight: isActive ? 600 : 400 }}>{tab.label}</span>
+                    style={{ flex: 1, padding: "8px 0 6px", border: "none", background: "transparent", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, color: tabColor, position: "relative", WebkitTapHighlightColor: "transparent" }}>
+                    <Icon size={20} color={tabColor} />
+                    <span style={{ fontSize: 9, fontWeight: isActive ? 600 : 400, letterSpacing: -0.1 }}>{tab.label}</span>
                     {cnt > 0 && (
-                      <span style={{ position: "absolute", top: 7, right: "15%", minWidth: 16, height: 16, borderRadius: 99, background: IOS.red, color: "white", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>
+                      <span style={{ position: "absolute", top: 6, right: "10%", minWidth: 15, height: 15, borderRadius: 99, background: IOS.red, color: "white", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
                         {cnt > 9 ? "9+" : cnt}
                       </span>
                     )}
@@ -384,8 +414,9 @@ export function OperatorApp({
 
               {/* Action strip */}
               {active && (() => {
-                const showAccept   = active.status === "waiting" && !takenByOther
-                const showOperator = isMine && active.status === "active"
+                const isExternal   = active.channel === "vk" || active.channel === "avito"
+                const showAccept   = !isExternal && active.status === "waiting" && !takenByOther
+                const showOperator = !isExternal && isMine && active.status === "active"
                 const showReopen   = active.status === "closed"
                 if (!showAccept && !showOperator && !showReopen && !takenByOther) return null
                 return (
@@ -421,45 +452,50 @@ export function OperatorApp({
             </div>
 
             {/* Messages */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "14px 14px", background: IOS.bg, display: "flex", flexDirection: "column", gap: 2 }}>
-              {grouped.map(group => (
-                <div key={group.date}>
-                  <div style={{ display: "flex", justifyContent: "center", margin: "10px 0 8px" }}>
-                    <span style={{ fontSize: 12, color: IOS.label3, fontWeight: 500 }}>{group.date}</span>
-                  </div>
-                  {group.msgs.map((m, i) => {
-                    const isOp = m.sender === "operator"
-                    const prev = group.msgs[i - 1]
-                    const showAv = !isOp && (!prev || prev.sender !== m.sender)
-                    return (
-                      <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: isOp ? "flex-end" : "flex-start", marginBottom: 5 }}>
-                        <div style={{ display: "flex", alignItems: "flex-end", gap: 6, flexDirection: isOp ? "row-reverse" : "row" }}>
-                          {!isOp && (
-                            <div style={{ width: 26, height: 26, flexShrink: 0, opacity: showAv ? 1 : 0 }}>
-                              <Avatar name={active?.visitorName ?? "П"} size={26} />
+            <div style={{ flex: 1, overflowY: "auto", background: IOS.bg, display: "flex", flexDirection: "column", overscrollBehavior: "contain" }}>
+              {/* spacer pushes messages to bottom like Telegram */}
+              <div style={{ flex: 1 }} />
+              <div style={{ padding: "8px 14px 12px" }}>
+                {messages.length === 0 && (
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 0", color: IOS.label3, fontSize: 14 }}>Нет сообщений</div>
+                )}
+                {grouped.map(group => (
+                  <div key={group.date}>
+                    <div style={{ display: "flex", justifyContent: "center", margin: "8px 0" }}>
+                      <span style={{ fontSize: 12, color: IOS.label3, fontWeight: 500 }}>{group.date}</span>
+                    </div>
+                    {group.msgs.map((m, i) => {
+                      const isOp = m.sender === "operator"
+                      const prev = group.msgs[i - 1]
+                      const showAv = !isOp && (!prev || prev.sender !== m.sender)
+                      return (
+                        <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: isOp ? "flex-end" : "flex-start", marginBottom: 5 }}>
+                          <div style={{ display: "flex", alignItems: "flex-end", gap: 6, flexDirection: isOp ? "row-reverse" : "row" }}>
+                            {!isOp && (
+                              <div style={{ width: 26, height: 26, flexShrink: 0, opacity: showAv ? 1 : 0 }}>
+                                <Avatar name={active?.visitorName ?? "П"} size={26} />
+                              </div>
+                            )}
+                            <div style={{
+                              maxWidth: "76%", padding: "9px 14px",
+                              borderRadius: isOp ? "18px 18px 5px 18px" : "18px 18px 18px 5px",
+                              background: isOp ? IOS.orange : IOS.bg2,
+                              color: IOS.label, fontSize: 15, lineHeight: 1.45,
+                              wordBreak: "break-word",
+                            }}>
+                              {m.text}
                             </div>
-                          )}
-                          <div style={{
-                            maxWidth: "74%", padding: "9px 14px",
-                            borderRadius: isOp ? "18px 18px 5px 18px" : "18px 18px 18px 5px",
-                            background: isOp ? IOS.orange : IOS.bg2,
-                            color: IOS.label, fontSize: 15, lineHeight: 1.45,
-                          }}>
-                            {m.text}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3, paddingLeft: isOp ? 0 : 32, justifyContent: isOp ? "flex-end" : "flex-start" }}>
+                            <span style={{ fontSize: 11, color: IOS.label3 }}>{formatTime(m.createdAt)}</span>
+                            {isOp && (m.isRead ? <CheckCheck size={12} color={IOS.blue} /> : <Check size={12} color={IOS.label3} />)}
                           </div>
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3, paddingLeft: isOp ? 0 : 32, justifyContent: isOp ? "flex-end" : "flex-start" }}>
-                          <span style={{ fontSize: 11, color: IOS.label3 }}>{formatTime(m.createdAt)}</span>
-                          {isOp && (m.isRead ? <CheckCheck size={12} color={IOS.blue} /> : <Check size={12} color={IOS.label3} />)}
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              ))}
-              {messages.length === 0 && (
-                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", color: IOS.label3, fontSize: 14 }}>Нет сообщений</div>
-              )}
+                      )
+                    })}
+                  </div>
+                ))}
+              </div>
               <div ref={bottomRef} />
             </div>
 
@@ -487,18 +523,20 @@ export function OperatorApp({
                 <span style={{ fontSize: 14, color: IOS.blue }}>Отложен на 5 минут</span>
               </div>
             ) : canWrite ? (
-              <div style={{ padding: "8px 12px", background: IOS.bg2, borderTop: `1px solid ${IOS.sep}`, flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom, 8px)" }}>
+              <div style={{ background: IOS.bg2, borderTop: `1px solid ${IOS.sep}`, flexShrink: 0, padding: "10px 12px", paddingBottom: "calc(10px + env(safe-area-inset-bottom, 0px))" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                  <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input) } }}
-                    placeholder={active?.status === "waiting" && !isMine ? "Сначала примите диалог" : "Сообщение..."}
-                    disabled={active?.status === "waiting" && !isMine}
-                    style={{ flex: 1, padding: "10px 14px", borderRadius: 22, background: IOS.bg3, border: "none", outline: "none", fontSize: 15, color: IOS.label }} />
+                  <div style={{ flex: 1, display: "flex", alignItems: "center", background: IOS.bg3, borderRadius: 24, padding: "0 14px", minHeight: 44 }}>
+                    <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
+                      onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input) } }}
+                      placeholder={active?.status === "waiting" && !isMine ? "Сначала примите диалог" : "Сообщение..."}
+                      disabled={active?.status === "waiting" && !isMine}
+                      style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 15, color: IOS.label, padding: "10px 0", minWidth: 0 }} />
+                  </div>
                   <button onClick={() => send(input)} disabled={!input.trim() || sending}
-                    style={{ width: 36, height: 36, borderRadius: "50%", border: "none", cursor: "pointer", background: input.trim() ? IOS.orange : IOS.bg4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.12s" }}>
+                    style={{ width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer", background: input.trim() ? IOS.orange : IOS.bg4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}>
                     {sending
-                      ? <div style={{ width: 14, height: 14, border: `2px solid rgba(255,255,255,0.3)`, borderTopColor: "white", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-                      : <Send size={15} color={input.trim() ? "white" : IOS.label3} />}
+                      ? <div style={{ width: 15, height: 15, border: `2px solid rgba(255,255,255,0.3)`, borderTopColor: "white", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
+                      : <Send size={17} color={input.trim() ? "white" : IOS.label3} style={{ marginLeft: 1 }} />}
                   </button>
                 </div>
               </div>
@@ -637,11 +675,14 @@ export function OperatorApp({
         </div>
         {TABS.map(tab => {
           const Icon = tab.icon
+          const isActive = filter === tab.key
           const cnt = tab.key === "waiting" ? totalUnread : 0
+          const activeColor = tab.key === "vk" ? "#4da3ff" : tab.key === "avito" ? "#4cd67a" : "white"
+          const iconColor = isActive ? activeColor : "rgba(255,255,255,0.35)"
           return (
             <button key={tab.key} onClick={() => { setFilter(tab.key); setActiveId(null); setMessages([]) }} title={tab.label}
-              style={{ width: 44, height: 44, borderRadius: 10, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: filter === tab.key ? "rgba(255,255,255,0.12)" : "transparent", color: filter === tab.key ? "white" : "rgba(255,255,255,0.35)", transition: "all 0.15s", position: "relative" }}>
-              <Icon size={18} />
+              style={{ width: 44, height: 44, borderRadius: 10, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: isActive ? "rgba(255,255,255,0.12)" : "transparent", transition: "all 0.15s", position: "relative" }}>
+              <Icon size={18} color={iconColor} />
               {cnt > 0 && <span style={{ position: "absolute", top: 6, right: 6, width: 14, height: 14, borderRadius: 99, background: "#ef4444", color: "white", fontSize: 8, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>{cnt > 9 ? "9+" : cnt}</span>}
             </button>
           )
@@ -709,13 +750,18 @@ export function OperatorApp({
                   {STATUS_LABEL[active?.status ?? "waiting"]}
                 </span>
                 {takenByOther && takenByOp && <span style={{ fontSize: 11, color: "#9CA3AF", background: "#F9FAFB", padding: "3px 8px", borderRadius: 8, border: "1px solid #E5E7EB" }}>Взял {takenByOp.name}</span>}
-                {(active?.status === "waiting" && !takenByOther) && <button onClick={accept} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 10, background: "#16a34a", color: "white", fontWeight: 600, fontSize: 12, border: "none", cursor: "pointer" }}>Принять <ChevronRight size={14} /></button>}
-                {isMine && active?.status !== "closed" && (
-                  <>
-                    <button onClick={postpone} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10, border: "1px solid #BFDBFE", background: "transparent", color: "#2563eb", fontSize: 12, fontWeight: 500, cursor: "pointer" }}><Clock size={13} /> 5 мин</button>
-                    <button onClick={close} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10, border: "1px solid #FECACA", background: "transparent", color: "#dc2626", fontSize: 12, fontWeight: 500, cursor: "pointer" }}><XCircle size={13} /> Закрыть</button>
-                  </>
-                )}
+                {(() => {
+                  const isExternal = active?.channel === "vk" || active?.channel === "avito"
+                  return (<>
+                    {(!isExternal && active?.status === "waiting" && !takenByOther) && <button onClick={accept} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 14px", borderRadius: 10, background: "#16a34a", color: "white", fontWeight: 600, fontSize: 12, border: "none", cursor: "pointer" }}>Принять <ChevronRight size={14} /></button>}
+                    {(!isExternal && isMine && active?.status !== "closed") && (
+                      <>
+                        <button onClick={postpone} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10, border: "1px solid #BFDBFE", background: "transparent", color: "#2563eb", fontSize: 12, fontWeight: 500, cursor: "pointer" }}><Clock size={13} /> 5 мин</button>
+                        <button onClick={close} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10, border: "1px solid #FECACA", background: "transparent", color: "#dc2626", fontSize: 12, fontWeight: 500, cursor: "pointer" }}><XCircle size={13} /> Закрыть</button>
+                      </>
+                    )}
+                  </>)
+                })()}
                 {active?.status === "closed" && <button onClick={reopen} style={{ display: "flex", alignItems: "center", gap: 5, padding: "7px 12px", borderRadius: 10, border: "1px solid #BBF7D0", background: "transparent", color: "#16a34a", fontSize: 12, fontWeight: 500, cursor: "pointer" }}><RotateCcw size={13} /> Открыть</button>}
                 <button onClick={() => setShowInfo(v => !v)} style={{ width: 32, height: 32, borderRadius: 8, border: "1px solid #E5E7EB", background: showInfo ? "#F9FAFB" : "transparent", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B7280" }}><User size={15} /></button>
               </div>
