@@ -71,11 +71,15 @@ export function ChatWidgetPage() {
     if (sid) setSessionId(sid)
 
     if (CONSENT_KEY && localStorage.getItem(CONSENT_KEY) === "1") setConsentGiven(true)
-    if (NAME_KEY && localStorage.getItem(NAME_KEY)) {
-      setVisitorName(localStorage.getItem(NAME_KEY)!)
-      setNameSubmitted(true)
+    if (NAME_KEY) {
+      const savedName = localStorage.getItem(NAME_KEY)
+      if (savedName) {
+        setVisitorName(savedName)
+        setNameSubmitted(true)
+        setConsentGiven(true)
+      }
     }
-  }, [token, CONSENT_KEY, NAME_KEY])
+  }, [token])
 
   const fetchMessages = useCallback(async (sid: string) => {
     const r = await fetch(`/api/messages?sessionId=${sid}`)
@@ -140,7 +144,9 @@ export function ChatWidgetPage() {
       const sid = await ensureSession()
       if (!sid) return
 
-      if (!consentGiven || (!nameSubmitted && !visitorName)) {
+      const hasConsent = consentGiven || (CONSENT_KEY ? localStorage.getItem(CONSENT_KEY) === "1" : false)
+      const hasName    = nameSubmitted || !!visitorName.trim() || (NAME_KEY ? !!localStorage.getItem(NAME_KEY) : false)
+      if (!hasConsent || !hasName) {
         setShowNameForm(true)
         setSending(false)
         return
