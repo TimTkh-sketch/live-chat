@@ -80,6 +80,10 @@
     isOpen ? close() : open()
   })
 
+  setTimeout(function () {
+    if (!isOpen) open()
+  }, 10000)
+
   /* ── PostMessage bridge ─────────────── */
   w.addEventListener("message", function (e) {
     if (!e.data || typeof e.data !== "object") return
