@@ -63,6 +63,9 @@ model ChatSession {
   visitorEmail String?
   visitorPage  String?
 
+  channel    String  @default("web")
+  externalId String?
+
   status         String   @default("waiting")
   postponedUntil DateTime?
   closedAt       DateTime?
@@ -70,6 +73,8 @@ model ChatSession {
   updatedAt      DateTime @updatedAt
 
   messages ChatMessage[]
+
+  @@unique([channel, externalId])
 }
 
 model ChatMessage {

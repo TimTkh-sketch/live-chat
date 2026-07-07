@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import {
   MessageCircle, ArrowLeft, Users, Settings2, Palette,
   Plus, Trash2, Edit3, Save, X, Eye, EyeOff,
-  Check, Loader, Circle, Clock, ShieldCheck, Zap, ChevronRight,
+  Check, Loader, Circle, Clock, ShieldCheck, Zap, ChevronRight, Radio,
 } from "lucide-react"
 
 interface Operator {
@@ -20,6 +20,7 @@ const COLORS = ["#F26522","#6366F1","#0EA5E9","#10B981","#EF4444","#F59E0B","#8B
 const TABS = [
   { key: "widget",    label: "Виджет",    icon: Palette },
   { key: "operators", label: "Операторы", icon: Users },
+  { key: "channels",  label: "Каналы",    icon: Radio },
   { key: "replies",   label: "Ответы",    icon: Zap },
   { key: "account",  label: "Аккаунт",   icon: ShieldCheck },
 ]
@@ -375,6 +376,9 @@ export function SettingsApp({
         </div>
       )
 
+      /* ── CHANNELS ── */
+      if (tab === "channels") return <ChannelsTab ios={IOS} inputStyle={inputStyle} />
+
       /* ── ACCOUNT ── */
       if (tab === "account") return (
         <div>
@@ -609,6 +613,14 @@ export function SettingsApp({
           </div>
         )}
 
+        {tab === "channels" && (
+          <div style={{ maxWidth: 600 }}>
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#111", marginBottom: 4 }}>Каналы</h1>
+            <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 28 }}>Подключите Telegram и VK — сообщения будут приходить прямо в панель оператора</p>
+            <ChannelsTab ios={null} inputStyle={null} />
+          </div>
+        )}
+
         {tab === "replies" && (
           <div style={{ maxWidth: 580 }}>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "#111", marginBottom: 4 }}>Быстрые ответы</h1>
@@ -705,5 +717,163 @@ function DSaveBtn({ loading, saved, onClick }: { loading: boolean; saved: boolea
       {loading ? <Loader size={15} style={{ animation: "spin 0.7s linear infinite" }} /> : saved ? <Check size={15} /> : <Save size={15} />}
       {loading ? "Сохраняю..." : saved ? "Сохранено!" : "Сохранить"}
     </button>
+  )
+}
+
+function ChannelsTab({ ios, inputStyle }: { ios: Record<string, string> | null; inputStyle: React.CSSProperties | null }) {
+  const [tgToken,   setTgToken]   = useState("")
+  const [tgStatus,  setTgStatus]  = useState<{ ok: boolean; username?: string } | null>(null)
+  const [tgLoading, setTgLoading] = useState(false)
+
+  const [vkToken,   setVkToken]   = useState("")
+  const [vkGroupId, setVkGroupId] = useState("")
+  const [vkSecret,  setVkSecret]  = useState("")
+  const [vkConfirm, setVkConfirm] = useState("")
+  const [vkSaved,   setVkSaved]   = useState(false)
+  const [vkSaving,  setVkSaving]  = useState(false)
+
+  const dark = !!ios
+
+  useEffect(() => {
+    fetch("/api/telegram/setup").then(r => r.json()).then(d => {
+      if (d.connected) setTgStatus({ ok: true, username: d.username })
+    }).catch(() => {})
+  }, [])
+
+  const fieldStyle: React.CSSProperties = dark ? (inputStyle ?? {}) : {
+    width: "100%", padding: "10px 14px", borderRadius: 10,
+    border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none",
+    background: "#FAFAFA", boxSizing: "border-box" as const, color: "#111",
+    fontFamily: "monospace",
+  }
+  const labelStyle: React.CSSProperties = dark
+    ? { fontSize: 11, fontWeight: 700, color: ios?.label3, display: "block", marginBottom: 8, marginTop: 16, textTransform: "uppercase" as const, letterSpacing: "0.06em" }
+    : { fontSize: 12, fontWeight: 600, color: "#6B7280", marginBottom: 6, marginTop: 14, display: "block" }
+
+  async function connectTelegram() {
+    if (!tgToken.trim()) return
+    setTgLoading(true)
+    setTgStatus(null)
+    try {
+      const r = await fetch("/api/telegram/setup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: tgToken }),
+      })
+      const data = await r.json()
+      if (data.ok) {
+        // Get webhook info to confirm
+        const info = await fetch("/api/telegram/setup").then(r => r.json())
+        setTgStatus({ ok: true, username: info.bot?.username, url: info.webhook?.result?.url })
+      } else {
+        setTgStatus({ ok: false })
+      }
+    } catch {
+      setTgStatus({ ok: false })
+    } finally {
+      setTgLoading(false)
+    }
+  }
+
+  async function saveVk() {
+    setVkSaving(true)
+    await fetch("/api/channels/vk", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token: vkToken, groupId: vkGroupId, secret: vkSecret, confirmCode: vkConfirm }),
+    })
+    setVkSaving(false)
+    setVkSaved(true)
+    setTimeout(() => setVkSaved(false), 2500)
+  }
+
+  const cardStyle: React.CSSProperties = dark
+    ? { background: ios?.bg2, borderRadius: 16, overflow: "hidden", marginBottom: 20 }
+    : { background: "white", borderRadius: 14, padding: "22px 24px", marginBottom: 16, border: "1px solid #F3F4F6", boxShadow: "0 1px 4px rgba(0,0,0,0.04)" }
+
+  const sectionTitle: React.CSSProperties = dark
+    ? { fontSize: 12, fontWeight: 500, color: ios?.label3, textTransform: "uppercase" as const, letterSpacing: "0.04em", padding: "0 4px", marginBottom: 8, marginTop: 28 }
+    : { fontWeight: 700, fontSize: 14, color: "#111", marginBottom: 18 }
+
+  const btnStyle = (color: string, disabled?: boolean): React.CSSProperties => ({
+    width: "100%", padding: "13px", borderRadius: 12, border: "none", cursor: disabled ? "not-allowed" : "pointer",
+    background: disabled ? (dark ? ios?.bg3 : "#E5E7EB") : color,
+    color: "white", fontWeight: 600, fontSize: 15,
+    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+    marginTop: 16, opacity: disabled ? 0.6 : 1,
+  })
+
+  const appUrl = typeof window !== "undefined" ? window.location.origin : ""
+
+  return (
+    <div style={{ padding: dark ? "0" : "0" }}>
+      {/* ── TELEGRAM ── */}
+      <p style={sectionTitle}>Telegram</p>
+      <div style={cardStyle}>
+        <div style={{ padding: dark ? "16px" : "0" }}>
+          {!dark && <h3 style={{ fontWeight: 700, fontSize: 14, color: "#111", marginBottom: 18 }}>Telegram бот</h3>}
+          <label style={labelStyle}>Токен бота (@BotFather)</label>
+          <input value={tgToken} onChange={e => setTgToken(e.target.value)}
+            placeholder="7123456789:AAFxxx..."
+            style={{ ...fieldStyle, fontFamily: "monospace" }} />
+
+          {tgStatus?.ok && (
+            <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 10, background: dark ? "rgba(48,209,88,0.12)" : "#f0fdf4", border: `1px solid ${dark ? "rgba(48,209,88,0.3)" : "#BBF7D0"}`, color: dark ? "#4ade80" : "#16a34a", fontSize: 13 }}>
+              ✓ Подключён @{tgStatus.username}
+            </div>
+          )}
+          {tgStatus && !tgStatus.ok && (
+            <div style={{ marginTop: 10, padding: "10px 14px", borderRadius: 10, background: dark ? "rgba(255,69,58,0.12)" : "#FEF2F2", border: `1px solid ${dark ? "rgba(255,69,58,0.3)" : "#FECACA"}`, color: dark ? "#FF453A" : "#DC2626", fontSize: 13 }}>
+              Ошибка. Проверь токен.
+            </div>
+          )}
+
+          <button onClick={connectTelegram} disabled={!tgToken.trim() || tgLoading} style={btnStyle("#229ED9", !tgToken.trim())}>
+            {tgLoading ? <><Loader size={15} style={{ animation: "spin 0.7s linear infinite" }} /> Подключаю...</> : "Подключить Telegram"}
+          </button>
+        </div>
+      </div>
+
+      {/* ── VK ── */}
+      <p style={{ ...sectionTitle, marginTop: dark ? 28 : 20 }}>ВКонтакте</p>
+      <div style={cardStyle}>
+        <div style={{ padding: dark ? "16px" : "0" }}>
+          {!dark && <h3 style={{ fontWeight: 700, fontSize: 14, color: "#111", marginBottom: 18 }}>VK сообщество</h3>}
+
+          <label style={labelStyle}>Токен сообщества</label>
+          <input value={vkToken} onChange={e => setVkToken(e.target.value)}
+            placeholder="vk1.a.xxxx..."
+            style={{ ...fieldStyle, fontFamily: "monospace" }} />
+
+          <label style={labelStyle}>ID группы (число)</label>
+          <input value={vkGroupId} onChange={e => setVkGroupId(e.target.value)}
+            placeholder="123456789"
+            style={fieldStyle} />
+
+          <label style={labelStyle}>Секретный ключ (придумай сам)</label>
+          <input value={vkSecret} onChange={e => setVkSecret(e.target.value)}
+            placeholder="любая строка, например: mysecret42"
+            style={fieldStyle} />
+
+          <label style={labelStyle}>Строка подтверждения (из VK)</label>
+          <input value={vkConfirm} onChange={e => setVkConfirm(e.target.value)}
+            placeholder="a1b2c3d4"
+            style={fieldStyle} />
+
+          <div style={{ marginTop: 14, padding: "12px 14px", borderRadius: 10, background: dark ? "rgba(255,255,255,0.04)" : "#F7F8FA", border: `1px solid ${dark ? "rgba(255,255,255,0.08)" : "#E5E7EB"}` }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: dark ? "rgba(235,235,245,0.6)" : "#374151", marginBottom: 4 }}>URL для Callback API VK:</p>
+            <p style={{ fontSize: 12, fontFamily: "monospace", color: dark ? "rgba(235,235,245,0.4)" : "#6B7280", wordBreak: "break-all" }}>
+              {appUrl}/api/vk/webhook
+            </p>
+          </div>
+
+          <button onClick={saveVk} disabled={!vkToken.trim() || vkSaving} style={btnStyle("#0077FF", !vkToken.trim())}>
+            {vkSaving ? <><Loader size={15} style={{ animation: "spin 0.7s linear infinite" }} /> Сохраняю...</>
+              : vkSaved ? <><Check size={15} /> Сохранено</>
+              : "Сохранить настройки VK"}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }

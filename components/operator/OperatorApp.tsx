@@ -15,6 +15,18 @@ interface Session   {
   id: string; visitorName: string | null; visitorPage: string | null; status: string
   operatorId: string | null; postponedUntil: string | null; createdAt: string; updatedAt: string
   messages: Message[]; operator: { id: string; name: string } | null; unreadCount?: number
+  channel?: string
+}
+
+function ChannelBadge({ channel }: { channel?: string }) {
+  if (!channel || channel === "web") return null
+  if (channel === "telegram") return (
+    <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "#229ED9", color: "white", flexShrink: 0 }}>TG</span>
+  )
+  if (channel === "vk") return (
+    <span style={{ fontSize: 10, fontWeight: 700, padding: "1px 5px", borderRadius: 4, background: "#0077FF", color: "white", flexShrink: 0 }}>VK</span>
+  )
+  return null
 }
 interface ChatSettings { quickReplies: string[]; greeting: string; primaryColor: string; operatorName: string }
 
@@ -290,11 +302,14 @@ export function OperatorApp({
 
                         {/* Info */}
                         <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between" }}>
-                            <span style={{ fontWeight: 600, fontSize: 15, color: IOS.label, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                              {s.visitorName ?? "Посетитель"}
-                            </span>
-                            <span style={{ fontSize: 12, color: IOS.label3, flexShrink: 0, marginLeft: 6 }}>{formatTime(s.updatedAt)}</span>
+                          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+                              <span style={{ fontWeight: 600, fontSize: 15, color: IOS.label, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                                {s.visitorName ?? "Посетитель"}
+                              </span>
+                              <ChannelBadge channel={s.channel} />
+                            </div>
+                            <span style={{ fontSize: 12, color: IOS.label3, flexShrink: 0, marginLeft: 4 }}>{formatTime(s.updatedAt)}</span>
                           </div>
                           <p style={{ fontSize: 13, color: IOS.label2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", marginTop: 2 }}>
                             {isTakenMe ? "● Вы ведёте этот диалог" : (lastMsg ? lastMsg.text : "Нет сообщений")}
@@ -597,7 +612,10 @@ export function OperatorApp({
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
-            <p style={{ fontWeight: 600, fontSize: 13, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.visitorName ?? "Посетитель"}</p>
+            <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
+              <p style={{ fontWeight: 600, fontSize: 13, color: "#111", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.visitorName ?? "Посетитель"}</p>
+              <ChannelBadge channel={s.channel} />
+            </div>
             <span style={{ fontSize: 10, color: "#9CA3AF", flexShrink: 0 }}>{formatTime(s.updatedAt)}</span>
           </div>
           <p style={{ fontSize: 12, color: "#6B7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>{lastMsg ? lastMsg.text : "Нет сообщений"}</p>
@@ -680,7 +698,10 @@ export function OperatorApp({
                 {(active?.visitorName ?? "П")[0].toUpperCase()}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontWeight: 600, fontSize: 14, color: "#111" }}>{active?.visitorName ?? "Посетитель"}</p>
+                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  <p style={{ fontWeight: 600, fontSize: 14, color: "#111" }}>{active?.visitorName ?? "Посетитель"}</p>
+                  <ChannelBadge channel={active?.channel} />
+                </div>
                 {active?.visitorPage && <p style={{ fontSize: 11, color: "#9CA3AF", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}><Globe size={10} style={{ display: "inline", marginRight: 3 }} />{active.visitorPage}</p>}
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
