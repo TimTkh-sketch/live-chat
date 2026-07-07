@@ -51,6 +51,7 @@ export function ChatWidgetPage() {
     : null
 
   const CONSENT_KEY = token ? `lc_consent_${token}` : null
+  const NAME_KEY    = token ? `lc_name_${token}` : null
 
   const primaryColor = settings?.primaryColor ?? "#F26522"
   const anyOnline    = operators.some(o => o.isOnline)
@@ -70,7 +71,11 @@ export function ChatWidgetPage() {
     if (sid) setSessionId(sid)
 
     if (CONSENT_KEY && localStorage.getItem(CONSENT_KEY) === "1") setConsentGiven(true)
-  }, [token, CONSENT_KEY])
+    if (NAME_KEY && localStorage.getItem(NAME_KEY)) {
+      setVisitorName(localStorage.getItem(NAME_KEY)!)
+      setNameSubmitted(true)
+    }
+  }, [token, CONSENT_KEY, NAME_KEY])
 
   const fetchMessages = useCallback(async (sid: string) => {
     const r = await fetch(`/api/messages?sessionId=${sid}`)
@@ -167,6 +172,7 @@ export function ChatWidgetPage() {
   async function submitName() {
     if (!visitorName.trim() || !consentChecked) return
     if (CONSENT_KEY) localStorage.setItem(CONSENT_KEY, "1")
+    if (NAME_KEY) localStorage.setItem(NAME_KEY, visitorName.trim())
     setConsentGiven(true)
     let sid = sessionId
     if (!sid) sid = await createSession()
