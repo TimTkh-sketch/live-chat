@@ -65,9 +65,6 @@
 
   function open() {
     isOpen = true
-    if (!iframe.src) {
-      iframe.src = baseUrl + "/widget?token=" + encodeURIComponent(token)
-    }
     iframe.classList.add("lc-open")
     unread = 0
     badge.textContent = "0"
@@ -102,6 +99,7 @@
   })
 
   /* ── Mount ───────────────────────────── */
+  iframe.src = baseUrl + "/widget?token=" + encodeURIComponent(token)
   d.body.appendChild(iframe)
   d.body.appendChild(btn)
 
