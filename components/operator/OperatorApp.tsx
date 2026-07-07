@@ -159,11 +159,12 @@ export function OperatorApp({
   const fetchSessions = useCallback(async () => {
     const tab = TABS.find(t => t.key === filter)
     const url = tab?.channel
-      ? `/api/session?workspaceId=${currentOperator.workspaceId}&channel=${tab.channel}`
-      : `/api/session?workspaceId=${currentOperator.workspaceId}&status=${filter}`
+      ? `/api/session?workspaceId=${currentOperator.workspaceId}&channel=${tab.channel}&limit=50`
+      : `/api/session?workspaceId=${currentOperator.workspaceId}&status=${filter}&limit=50`
     const r = await fetch(url)
     const d = await r.json()
-    if (Array.isArray(d)) setSessions(d)
+    if (d?.sessions) setSessions(d.sessions)
+    else if (Array.isArray(d)) setSessions(d)
   }, [currentOperator.workspaceId, filter])
 
   useEffect(() => {

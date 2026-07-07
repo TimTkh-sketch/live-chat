@@ -25,32 +25,43 @@ export async function GET(req: NextRequest) {
   const workspaceId = searchParams.get("workspaceId")
   const status = searchParams.get("status") || "waiting"
   const channel = searchParams.get("channel")
+  const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100)
+  const offset = parseInt(searchParams.get("offset") || "0")
 
   if (!workspaceId) return NextResponse.json({ error: "Missing workspaceId" }, { status: 400 })
 
   const externalChannels = ["vk", "avito"]
 
-  const sessions = await db.chatSession.findMany({
-    where: channel
-      ? { workspaceId, channel, NOT: { status: "closed" } }
-      : status === "active"
-        ? { workspaceId, status: { in: ["active", "postponed"] }, NOT: { channel: { in: externalChannels } } }
-        : { workspaceId, status, NOT: { channel: { in: externalChannels } } },
-    orderBy: { updatedAt: "desc" },
-    include: {
-      messages: { orderBy: { createdAt: "desc" }, take: 1 },
-      operator: { select: { id: true, name: true, avatar: true } },
-    },
+  const where = channel
+    ? { workspaceId, channel, NOT: { status: "closed" } }
+    : status === "active"
+      ? { workspaceId, status: { in: ["active", "postponed"] }, NOT: { channel: { in: externalChannels } } }
+      : { workspaceId, status, NOT: { channel: { in: externalChannels } } }
+
+  const [sessions, total] = await Promise.all([
+    db.chatSession.findMany({
+      where,
+      orderBy: { updatedAt: "desc" },
+      take: limit,
+      skip: offset,
+      include: {
+        messages: { orderBy: { createdAt: "desc" }, take: 1 },
+        operator: { select: { id: true, name: true, avatar: true } },
+      },
+    }),
+    db.chatSession.count({ where }),
+  ])
+
+  // Считаем unread одним запросом вместо N запросов
+  const sessionIds = sessions.map(s => s.id)
+  const unreadRows = await db.chatMessage.groupBy({
+    by: ["sessionId"],
+    where: { sessionId: { in: sessionIds }, sender: "visitor", isRead: false },
+    _count: { id: true },
   })
+  const unreadMap = Object.fromEntries(unreadRows.map(r => [r.sessionId, r._count.id]))
 
-  const withUnread = await Promise.all(
-    sessions.map(async (s) => {
-      const unreadCount = await db.chatMessage.count({
-        where: { sessionId: s.id, sender: "visitor", isRead: false },
-      })
-      return { ...s, unreadCount }
-    })
-  )
+  const withUnread = sessions.map(s => ({ ...s, unreadCount: unreadMap[s.id] ?? 0 }))
 
-  return NextResponse.json(withUnread)
+  return NextResponse.json({ sessions: withUnread, total, limit, offset })
 }
