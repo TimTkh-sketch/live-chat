@@ -36,6 +36,8 @@ async function resolveVkName(userId: string): Promise<string> {
 export async function POST(req: NextRequest) {
   const body = await req.json()
 
+  console.log("[VK webhook] type:", body.type, "group:", body.group_id)
+
   if (body.type === "confirmation") {
     return new NextResponse(process.env.VK_CONFIRMATION_CODE ?? "", {
       headers: { "Content-Type": "text/plain" },
