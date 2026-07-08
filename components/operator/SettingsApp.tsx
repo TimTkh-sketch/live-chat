@@ -454,7 +454,7 @@ export function SettingsApp({
         </div>
 
         {/* Tab bar */}
-        <div style={{ background: IOS.tabBarBg, borderTop: `1px solid ${IOS.sep}`, display: "flex", flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+        <div style={{ background: IOS.tabBarBg, borderTop: `1px solid ${IOS.sep}`, display: "flex", flexShrink: 0, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)" }}>
           {TABS.map(t => {
             const Icon = t.icon
             const isActive = tab === t.key
