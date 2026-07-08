@@ -52,6 +52,27 @@ function Avatar({ name, size = 40 }: { name: string; size?: number }) {
   )
 }
 
+function Section({ label, footer, children }: { label?: string; footer?: string; children: React.ReactNode }) {
+  return (
+    <div style={{ margin: "28px 0 0" }}>
+      {label && <p style={{ fontSize: 12, fontWeight: 500, color: IOS.label3, textTransform: "uppercase", letterSpacing: "0.04em", padding: "0 20px", marginBottom: 8 }}>{label}</p>}
+      <div style={{ background: IOS.bg2, overflow: "hidden" }}>
+        {children}
+      </div>
+      {footer && <p style={{ fontSize: 12, color: IOS.label3, padding: "8px 20px" }}>{footer}</p>}
+    </div>
+  )
+}
+
+function Row({ label, value, children, last }: { label?: string; value?: string; children?: React.ReactNode; last?: boolean }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 16px", borderBottom: last ? "none" : `1px solid ${IOS.sep}` }}>
+      {label && <span style={{ fontSize: 15, color: IOS.label, minWidth: 80, flexShrink: 0, padding: "12px 0" }}>{label}</span>}
+      {children ?? <span style={{ fontSize: 15, color: IOS.label2, flex: 1, textAlign: label ? "right" : "left", padding: "12px 0" }}>{value}</span>}
+    </div>
+  )
+}
+
 export function SettingsApp({
   currentOperator,
   initialSettings,
@@ -175,29 +196,6 @@ export function SettingsApp({
     const textareaStyle: React.CSSProperties = {
       ...inputStyle, resize: "vertical" as const, fontFamily: "inherit", minHeight: 72,
       borderBottom: "none", borderRadius: 0,
-    }
-
-    /* Grouped section */
-    function Section({ label, footer, children }: { label?: string; footer?: string; children: React.ReactNode }) {
-      return (
-        <div style={{ margin: "28px 0 0" }}>
-          {label && <p style={{ fontSize: 12, fontWeight: 500, color: IOS.label3, textTransform: "uppercase", letterSpacing: "0.04em", padding: "0 20px", marginBottom: 8 }}>{label}</p>}
-          <div style={{ background: IOS.bg2, overflow: "hidden" }}>
-            {children}
-          </div>
-          {footer && <p style={{ fontSize: 12, color: IOS.label3, padding: "8px 20px" }}>{footer}</p>}
-        </div>
-      )
-    }
-
-    /* Row inside a section */
-    function Row({ label, value, children, last }: { label?: string; value?: string; children?: React.ReactNode; last?: boolean }) {
-      return (
-        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "0 16px", borderBottom: last ? "none" : `1px solid ${IOS.sep}` }}>
-          {label && <span style={{ fontSize: 15, color: IOS.label, minWidth: 80, flexShrink: 0, padding: "12px 0" }}>{label}</span>}
-          {children ?? <span style={{ fontSize: 15, color: IOS.label2, flex: 1, textAlign: label ? "right" : "left", padding: "12px 0" }}>{value}</span>}
-        </div>
-      )
     }
 
     const renderContent = () => {
