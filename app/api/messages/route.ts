@@ -48,7 +48,14 @@ export async function POST(req: NextRequest) {
       if (session.channel === "telegram") {
         sendTelegram(session.externalId, text).catch(() => {})
       } else if (session.channel === "vk") {
-        sendVk(session.externalId, text).catch(() => {})
+        sendVk(session.externalId, text).then(vkId => {
+          if (vkId) {
+            db.chatMessage.update({
+              where: { id: message.id },
+              data: { externalId: `vk_${vkId}` },
+            }).catch(() => {})
+          }
+        }).catch(() => {})
       } else if (session.channel === "avito") {
         sendAvito(session.externalId, text).catch(() => {})
       }
