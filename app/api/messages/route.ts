@@ -48,8 +48,15 @@ export async function POST(req: NextRequest) {
   if (sender === "visitor") {
     const session = await db.chatSession.findUnique({
       where: { id: sessionId },
-      select: { workspaceId: true, visitorName: true, channel: true },
+      select: { workspaceId: true, visitorName: true, channel: true, status: true },
     })
+
+    if (session && (session.status === "closed" || session.status === "postponed")) {
+      await db.chatSession.update({
+        where: { id: sessionId },
+        data: { status: "waiting", operatorId: null, postponedUntil: null },
+      })
+    }
     if (session) {
       const channelLabel = session.channel === "telegram" ? " (TG)" : session.channel === "vk" ? " (VK)" : session.channel === "avito" ? " (Авито)" : ""
       const visitorName = (session.visitorName || "Посетитель") + channelLabel
