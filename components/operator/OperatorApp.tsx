@@ -114,7 +114,7 @@ export function OperatorApp({
   operators,
   settings,
 }: {
-  currentOperator: { id: string; name: string; avatar: string | null; workspaceId: string }
+  currentOperator: { id: string; name: string; avatar: string | null; workspaceId: string; canManageSettings: boolean; canManageOperators: boolean; canManageChannels: boolean; canManageReplies: boolean }
   initialSessions: Session[]
   operators: Operator[]
   settings: ChatSettings | null
@@ -139,6 +139,8 @@ export function OperatorApp({
   const takenByOther = !!(active?.operatorId && active.operatorId !== currentOperator.id)
   const takenByOp    = operators.find(o => o.id === active?.operatorId)
   const canWrite     = active?.status !== "closed" && active?.status !== "postponed" && !takenByOther
+
+  const canViewSettings = currentOperator.canManageSettings || currentOperator.canManageOperators || currentOperator.canManageChannels || currentOperator.canManageReplies
 
   const color        = settings?.primaryColor ?? "#F26522"
   const quickReplies = settings?.quickReplies ?? []
@@ -293,9 +295,9 @@ export function OperatorApp({
                   <button onClick={handleNotif} style={{ background: "none", border: "none", cursor: "pointer", color: notif ? IOS.green : IOS.label3, padding: "6px 8px" }}>
                     {notif ? <Bell size={20} /> : <BellOff size={20} />}
                   </button>
-                  <a href="/settings" style={{ color: IOS.label3, display: "flex", alignItems: "center", padding: "6px 8px", textDecoration: "none" }}>
+                  {canViewSettings && <a href="/settings" style={{ color: IOS.label3, display: "flex", alignItems: "center", padding: "6px 8px", textDecoration: "none" }}>
                     <Settings2 size={20} />
-                  </a>
+                  </a>}
                   <button onClick={logout} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.label3, padding: "6px 8px" }}>
                     <LogOut size={20} />
                   </button>
@@ -714,9 +716,9 @@ export function OperatorApp({
         <button onClick={handleNotif} style={{ width: 44, height: 44, borderRadius: 10, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", color: notif ? "#4ade80" : "rgba(255,255,255,0.3)" }}>
           {notif ? <Bell size={18} /> : <BellOff size={18} />}
         </button>
-        <a href="/settings" style={{ width: 44, height: 44, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", color: "rgba(255,255,255,0.3)", textDecoration: "none" }}>
+        {canViewSettings && <a href="/settings" style={{ width: 44, height: 44, borderRadius: 10, display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", color: "rgba(255,255,255,0.3)", textDecoration: "none" }}>
           <Settings2 size={18} />
-        </a>
+        </a>}
         <button onClick={logout} style={{ width: 44, height: 44, borderRadius: 10, border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", background: "transparent", color: "rgba(255,255,255,0.3)", marginBottom: 8 }}>
           <LogOut size={18} />
         </button>

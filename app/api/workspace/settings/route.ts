@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   const op = await getOperatorSession()
   if (!op) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  if (!op.canManageSettings) return NextResponse.json({ error: "Нет прав на изменение настроек" }, { status: 403 })
 
   const body = await req.json()
   const settings = await db.workspaceSettings.upsert({

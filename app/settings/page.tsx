@@ -11,14 +11,14 @@ export default async function SettingsPage() {
     db.workspaceSettings.findUnique({ where: { workspaceId: op.workspaceId } }),
     db.operator.findMany({
       where: { workspaceId: op.workspaceId },
-      select: { id: true, name: true, email: true, avatar: true, isOnline: true, lastSeenAt: true, createdAt: true },
+      select: { id: true, name: true, email: true, avatar: true, isOnline: true, lastSeenAt: true, createdAt: true, canManageSettings: true, canManageOperators: true, canManageChannels: true, canManageReplies: true },
       orderBy: { createdAt: "asc" },
     }),
   ])
 
   return (
     <SettingsApp
-      currentOperator={{ id: op.id, name: op.name, email: op.email, avatar: op.avatar, workspaceId: op.workspaceId }}
+      currentOperator={{ id: op.id, name: op.name, email: op.email, avatar: op.avatar, workspaceId: op.workspaceId, canManageSettings: op.canManageSettings, canManageOperators: op.canManageOperators, canManageChannels: op.canManageChannels, canManageReplies: op.canManageReplies }}
       initialSettings={settings}
       initialOperators={JSON.parse(JSON.stringify(operators))}
     />

@@ -45,6 +45,11 @@ model Operator {
   lastSeenAt DateTime?
   createdAt  DateTime @default(now())
 
+  canManageSettings  Boolean @default(true)
+  canManageOperators Boolean @default(true)
+  canManageChannels  Boolean @default(true)
+  canManageReplies   Boolean @default(true)
+
   sessions           ChatSession[]
   pushSubscriptions  PushSubscription[]
 

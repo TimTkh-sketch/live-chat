@@ -22,7 +22,7 @@ export default async function Home() {
 
   return (
     <OperatorApp
-      currentOperator={{ id: op.id, name: op.name, avatar: op.avatar, workspaceId: op.workspaceId }}
+      currentOperator={{ id: op.id, name: op.name, avatar: op.avatar, workspaceId: op.workspaceId, canManageSettings: op.canManageSettings, canManageOperators: op.canManageOperators, canManageChannels: op.canManageChannels, canManageReplies: op.canManageReplies }}
       initialSessions={JSON.parse(JSON.stringify(sessions))}
       operators={operators}
       settings={settings}

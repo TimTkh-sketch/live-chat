@@ -10,6 +10,7 @@ import {
 interface Operator {
   id: string; name: string; email: string; avatar: string | null
   isOnline: boolean; lastSeenAt: string | null; createdAt: string
+  canManageSettings: boolean; canManageOperators: boolean; canManageChannels: boolean; canManageReplies: boolean
 }
 interface ChatSettings {
   greeting: string; offlineText: string; primaryColor: string
@@ -18,12 +19,14 @@ interface ChatSettings {
 
 const COLORS = ["#F26522","#6366F1","#0EA5E9","#10B981","#EF4444","#F59E0B","#8B5CF6","#EC4899","#14B8A6","#1a1a1a"]
 const TABS = [
-  { key: "widget",    label: "Виджет",    icon: Palette },
-  { key: "operators", label: "Операторы", icon: Users },
-  { key: "channels",  label: "Каналы",    icon: Radio },
-  { key: "replies",   label: "Ответы",    icon: Zap },
-  { key: "account",  label: "Аккаунт",   icon: ShieldCheck },
+  { key: "widget",    label: "Виджет",    icon: Palette,     perm: "canManageSettings"  as const },
+  { key: "operators", label: "Операторы", icon: Users,       perm: "canManageOperators" as const },
+  { key: "channels",  label: "Каналы",    icon: Radio,       perm: "canManageChannels"  as const },
+  { key: "replies",   label: "Ответы",    icon: Zap,         perm: "canManageReplies"   as const },
+  { key: "account",   label: "Аккаунт",  icon: ShieldCheck, perm: null },
 ]
+
+type Perms = { canManageSettings: boolean; canManageOperators: boolean; canManageChannels: boolean; canManageReplies: boolean }
 
 const IOS = {
   bg:       "#000000",
@@ -78,11 +81,12 @@ export function SettingsApp({
   initialSettings,
   initialOperators,
 }: {
-  currentOperator: { id: string; name: string; email: string; avatar: string | null; workspaceId: string }
+  currentOperator: { id: string; name: string; email: string; avatar: string | null; workspaceId: string } & Perms
   initialSettings: ChatSettings | null
   initialOperators: Operator[]
 }) {
-  const [tab,      setTab]     = useState("widget")
+  const visibleTabs = TABS.filter(t => !t.perm || currentOperator[t.perm])
+  const [tab,      setTab]     = useState(() => visibleTabs[0]?.key ?? "account")
   const [isMobile, setIsMobile] = useState(false)
 
   useLayoutEffect(() => {
@@ -114,6 +118,10 @@ export function SettingsApp({
   const [showPass,    setShowPass]    = useState(false)
   const [addingOp,    setAddingOp]    = useState(false)
   const [addError,    setAddError]    = useState("")
+  const [newPerms,    setNewPerms]    = useState<Perms>({ canManageSettings: false, canManageOperators: false, canManageChannels: false, canManageReplies: false })
+  const [editPermId,  setEditPermId]  = useState<string | null>(null)
+  const [editPerms,   setEditPerms]   = useState<Perms>({ canManageSettings: false, canManageOperators: false, canManageChannels: false, canManageReplies: false })
+  const [savingPerm,  setSavingPerm]  = useState(false)
 
   const [myName,     setMyName]     = useState(currentOperator.name)
   const [myEmail,    setMyEmail]    = useState(currentOperator.email)
@@ -159,11 +167,22 @@ export function SettingsApp({
   async function addOperator() {
     if (!newName.trim() || !newEmail.trim() || !newPass.trim()) { setAddError("Заполните все поля"); return }
     setAddingOp(true); setAddError("")
-    const r = await fetch("/api/operators", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newName, email: newEmail, password: newPass }) })
+    const r = await fetch("/api/operators", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newName, email: newEmail, password: newPass, ...newPerms }) })
     const data = await r.json()
     if (!r.ok) { setAddError(data.error || "Ошибка"); setAddingOp(false); return }
-    setOperators(prev => [...prev, { ...data, isOnline: false, lastSeenAt: null, createdAt: new Date().toISOString() }])
+    setOperators(prev => [...prev, { ...data, isOnline: false, lastSeenAt: null, createdAt: new Date().toISOString(), ...newPerms }])
     setNewName(""); setNewEmail(""); setNewPass(""); setShowAddForm(false); setAddingOp(false)
+    setNewPerms({ canManageSettings: false, canManageOperators: false, canManageChannels: false, canManageReplies: false })
+  }
+
+  async function savePerms(id: string, perms: Perms) {
+    setSavingPerm(true)
+    const r = await fetch(`/api/operators/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(perms) })
+    if (r.ok) {
+      setOperators(prev => prev.map(o => o.id === id ? { ...o, ...perms } : o))
+      setEditPermId(null)
+    }
+    setSavingPerm(false)
   }
 
   async function deleteOperator(id: string) {
@@ -260,7 +279,8 @@ export function SettingsApp({
         <div>
           <Section label={`Операторы · ${operators.length}`}>
             {operators.map((op, idx) => (
-              <div key={op.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", borderBottom: idx === operators.length - 1 ? "none" : `1px solid ${IOS.sep}` }}>
+              <div key={op.id}>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "10px 16px", borderBottom: (editPermId !== op.id && idx === operators.length - 1) ? "none" : `1px solid ${IOS.sep}` }}>
                 <div style={{ position: "relative", flexShrink: 0 }}>
                   <Avatar name={op.name} size={40} />
                   <span style={{ position: "absolute", bottom: 1, right: 1, width: 10, height: 10, borderRadius: "50%", background: op.isOnline ? IOS.green : IOS.bg4, border: `2px solid ${IOS.bg2}` }} />
@@ -273,12 +293,51 @@ export function SettingsApp({
                   <p style={{ fontSize: 13, color: IOS.label3, marginTop: 1 }}>
                     {op.isOnline ? <span style={{ color: IOS.green }}>Онлайн</span> : op.email}
                   </p>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 5 }}>
+                    {op.canManageSettings  && <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 99, background: `${IOS.orange}22`, color: IOS.orange }}>Настройки</span>}
+                    {op.canManageOperators && <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 99, background: `${IOS.blue}22`, color: IOS.blue }}>Операторы</span>}
+                    {op.canManageChannels  && <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 99, background: `${IOS.green}22`, color: IOS.green }}>Каналы</span>}
+                    {op.canManageReplies   && <span style={{ fontSize: 10, fontWeight: 600, padding: "2px 7px", borderRadius: 99, background: `${IOS.label3}`, color: IOS.label }}>Ответы</span>}
+                  </div>
                 </div>
-                {op.id !== currentOperator.id && (
-                  <button onClick={() => deleteOperator(op.id)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.red, padding: 4 }}>
-                    <Trash2 size={18} />
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  {op.id !== currentOperator.id && currentOperator.canManageOperators && (
+                    <button onClick={() => {
+                      if (editPermId === op.id) { setEditPermId(null); return }
+                      setEditPermId(op.id)
+                      setEditPerms({ canManageSettings: op.canManageSettings, canManageOperators: op.canManageOperators, canManageChannels: op.canManageChannels, canManageReplies: op.canManageReplies })
+                    }} style={{ background: "none", border: "none", cursor: "pointer", color: editPermId === op.id ? IOS.orange : IOS.label3, padding: 4 }}>
+                      <Edit3 size={17} />
+                    </button>
+                  )}
+                  {op.id !== currentOperator.id && currentOperator.canManageOperators && (
+                    <button onClick={() => deleteOperator(op.id)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.red, padding: 4 }}>
+                      <Trash2 size={18} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {editPermId === op.id && (
+                <div style={{ background: IOS.bg3, padding: "12px 16px", borderTop: `1px solid ${IOS.sep}` }}>
+                  <p style={{ fontSize: 11, color: IOS.label3, marginBottom: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Права доступа</p>
+                  {([
+                    { key: "canManageSettings",  label: "Настройки виджета" },
+                    { key: "canManageOperators", label: "Управление операторами" },
+                    { key: "canManageChannels",  label: "Каналы (VK, Авито, Telegram)" },
+                    { key: "canManageReplies",   label: "Быстрые ответы" },
+                  ] as { key: keyof Perms; label: string }[]).map(p => (
+                    <label key={p.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", cursor: "pointer" }}>
+                      <input type="checkbox" checked={editPerms[p.key]} onChange={e => setEditPerms(prev => ({ ...prev, [p.key]: e.target.checked }))}
+                        style={{ width: 18, height: 18, accentColor: IOS.orange, cursor: "pointer" }} />
+                      <span style={{ fontSize: 14, color: IOS.label }}>{p.label}</span>
+                    </label>
+                  ))}
+                  <button onClick={() => savePerms(op.id, editPerms)} disabled={savingPerm}
+                    style={{ marginTop: 10, width: "100%", padding: "10px", borderRadius: 8, border: "none", cursor: "pointer", background: IOS.orange, color: "white", fontWeight: 600, fontSize: 14, opacity: savingPerm ? 0.7 : 1 }}>
+                    {savingPerm ? "Сохраняю..." : "Сохранить права"}
                   </button>
-                )}
+                </div>
+              )}
               </div>
             ))}
           </Section>
@@ -309,6 +368,21 @@ export function SettingsApp({
                   </button>
                 </div>
               </Row>
+              <div style={{ padding: "12px 16px", borderTop: `1px solid ${IOS.sep}` }}>
+                <p style={{ fontSize: 11, color: IOS.label3, marginBottom: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em" }}>Права доступа</p>
+                {([
+                  { key: "canManageSettings",  label: "Настройки виджета" },
+                  { key: "canManageOperators", label: "Управление операторами" },
+                  { key: "canManageChannels",  label: "Каналы (VK, Авито, Telegram)" },
+                  { key: "canManageReplies",   label: "Быстрые ответы" },
+                ] as { key: keyof Perms; label: string }[]).map(p => (
+                  <label key={p.key} style={{ display: "flex", alignItems: "center", gap: 10, padding: "6px 0", cursor: "pointer" }}>
+                    <input type="checkbox" checked={newPerms[p.key]} onChange={e => setNewPerms(prev => ({ ...prev, [p.key]: e.target.checked }))}
+                      style={{ width: 18, height: 18, accentColor: IOS.orange, cursor: "pointer" }} />
+                    <span style={{ fontSize: 14, color: IOS.label }}>{p.label}</span>
+                  </label>
+                ))}
+              </div>
               {addError && <p style={{ fontSize: 13, color: IOS.red, padding: "8px 16px" }}>{addError}</p>}
               <div style={{ padding: "12px 16px" }}>
                 <button onClick={addOperator} disabled={addingOp}
@@ -453,7 +527,7 @@ export function SettingsApp({
 
         {/* Tab bar */}
         <div style={{ background: IOS.tabBarBg, borderTop: `1px solid ${IOS.sep}`, display: "flex", flexShrink: 0, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)" }}>
-          {TABS.map(t => {
+          {visibleTabs.map(t => {
             const Icon = t.icon
             const isActive = tab === t.key
             return (
@@ -489,7 +563,7 @@ export function SettingsApp({
           </div>
         </div>
         <nav style={{ padding: "8px 8px", flex: 1 }}>
-          {TABS.map(t => {
+          {visibleTabs.map(t => {
             const Icon = t.icon
             return (
               <button key={t.key} onClick={() => setTab(t.key)}
