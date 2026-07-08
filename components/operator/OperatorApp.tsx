@@ -270,7 +270,7 @@ export function OperatorApp({
   ══════════════════════════════════════ */
   if (isMobile) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", height: "100svh", background: IOS.bg, overflow: "hidden" }}>
+      <div style={{ display: "flex", flexDirection: "column", height: "100dvh", background: IOS.bg, overflow: "hidden" }}>
 
         {/* ════ LIST VIEW ════ */}
         {mobileView === "list" && (
@@ -367,7 +367,7 @@ export function OperatorApp({
             </div>
 
             {/* Tab bar */}
-            <div style={{ background: IOS.tabBarBg, borderTop: `1px solid ${IOS.sep}`, display: "flex", flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
+            <div style={{ background: IOS.tabBarBg, borderTop: `1px solid ${IOS.sep}`, display: "flex", flexShrink: 0, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)" }}>
               {TABS.map(tab => {
                 const Icon = tab.icon
                 const isActive = filter === tab.key
@@ -536,12 +536,12 @@ export function OperatorApp({
 
             {/* Input / status footer */}
             {active?.status === "closed" ? (
-              <div style={{ padding: "12px 16px", background: IOS.bg2, borderTop: `1px solid ${IOS.sep}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom, 12px)" }}>
+              <div style={{ padding: "12px 16px", background: IOS.bg2, borderTop: `1px solid ${IOS.sep}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}>
                 <span style={{ fontSize: 14, color: IOS.label3 }}>Чат закрыт</span>
                 <button onClick={reopen} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.orange, fontSize: 15, fontWeight: 600 }}>Открыть</button>
               </div>
             ) : active?.status === "postponed" ? (
-              <div style={{ padding: "12px 16px", background: IOS.bg2, borderTop: `1px solid ${IOS.sep}`, display: "flex", alignItems: "center", gap: 8, flexShrink: 0, paddingBottom: "env(safe-area-inset-bottom, 12px)" }}>
+              <div style={{ padding: "12px 16px", background: IOS.bg2, borderTop: `1px solid ${IOS.sep}`, display: "flex", alignItems: "center", gap: 8, flexShrink: 0, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 12px)" }}>
                 <Clock size={15} color={IOS.blue} />
                 <span style={{ fontSize: 14, color: IOS.blue }}>Отложен на 5 минут</span>
               </div>
