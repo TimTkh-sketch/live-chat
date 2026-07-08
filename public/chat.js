@@ -1,6 +1,22 @@
 ;(function (w, d) {
   "use strict"
 
+  /* ── Убиваем Jivo ─────────────────────── */
+  w.jivo_config = { chat_id: null }
+  w.jivo_onLoadCallback = function () {
+    try { if (w.jivo_api) w.jivo_api.destroy() } catch (_) {}
+  }
+  var _jt = setInterval(function () {
+    if (w.jivo_api) {
+      try { w.jivo_api.destroy() } catch (_) {}
+      var el = d.getElementById("jivo-iframe-container")
+      if (el) el.style.display = "none"
+      clearInterval(_jt)
+    }
+  }, 400)
+  setTimeout(function () { clearInterval(_jt) }, 20000)
+  /* ─────────────────────────────────────── */
+
   var LC = w.__LiveChat || {}
   if (LC._loaded) return
   LC._loaded = true

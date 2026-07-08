@@ -128,12 +128,13 @@ export function OperatorApp({
   const [search,     setSearch]     = useState("")
   const [notif,      setNotif]      = useState(false)
   const [showInfo,   setShowInfo]   = useState(true)
-  const [isMobile,   setIsMobile]   = useState(false)
+  const [isMobile,   setIsMobile]   = useState(() => typeof window !== "undefined" && window.innerWidth < 1024)
   const [mobileView, setMobileView] = useState<"list" | "chat">("list")
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLInputElement>(null)
 
   const active       = sessions.find(s => s.id === activeId) ?? null
+  const isExternal   = active?.channel === "vk" || active?.channel === "avito"
   const isMine       = active?.operatorId === currentOperator.id
   const takenByOther = !!(active?.operatorId && active.operatorId !== currentOperator.id)
   const takenByOp    = operators.find(o => o.id === active?.operatorId)
@@ -144,7 +145,7 @@ export function OperatorApp({
   const totalUnread  = sessions.reduce((a, s) => a + (s.unreadCount ?? 0), 0)
 
   useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768)
+    const check = () => setIsMobile(window.innerWidth < 1024)
     check()
     window.addEventListener("resize", check)
     return () => window.removeEventListener("resize", check)
@@ -227,6 +228,10 @@ export function OperatorApp({
     if (!activeId || !text.trim() || sending) return
     setSending(true)
     try {
+      // Для VK/Avito — принимаем и назначаем оператора автоматически при первом ответе
+      if (isExternal && active?.status === "waiting") {
+        await patch(activeId, { status: "active", operatorId: currentOperator.id })
+      }
       await fetch("/api/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId: activeId, text, sender: "operator" }) })
       setInput("")
       await fetchMessages(activeId)
@@ -529,8 +534,8 @@ export function OperatorApp({
                   <div style={{ flex: 1, display: "flex", alignItems: "center", background: IOS.bg3, borderRadius: 24, padding: "0 14px", minHeight: 44 }}>
                     <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
                       onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input) } }}
-                      placeholder={active?.status === "waiting" && !isMine ? "Сначала примите диалог" : "Сообщение..."}
-                      disabled={active?.status === "waiting" && !isMine}
+                      placeholder="Сообщение..."
+                      disabled={!isExternal && active?.status === "waiting" && !isMine}
                       style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 15, color: IOS.label, padding: "10px 0", minWidth: 0 }} />
                   </div>
                   <button onClick={() => send(input)} disabled={!input.trim() || sending}
@@ -612,8 +617,8 @@ export function OperatorApp({
         <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#F8F9FA", borderRadius: 14, padding: "8px 8px 8px 16px", border: "1.5px solid #E5E7EB" }}>
           <input ref={inputRef} value={input} onChange={e => setInput(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input) } }}
-            placeholder={active?.status === "waiting" && !isMine ? "Сначала примите диалог..." : "Напишите ответ... (Enter — отправить)"}
-            disabled={active?.status === "waiting" && !isMine}
+            placeholder={!isExternal && active?.status === "waiting" && !isMine ? "Сначала примите диалог..." : "Напишите ответ... (Enter — отправить)"}
+            disabled={!isExternal && active?.status === "waiting" && !isMine}
             style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 14, color: "#111" }} />
           <button onClick={() => send(input)} disabled={!input.trim() || sending}
             style={{ width: 36, height: 36, borderRadius: 10, border: "none", cursor: "pointer", background: input.trim() ? color : "#E5E7EB", display: "flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s", flexShrink: 0 }}>
