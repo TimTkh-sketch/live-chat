@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useLayoutEffect } from "react"
 import {
   MessageCircle, ArrowLeft, Users, Settings2, Palette,
   Plus, Trash2, Edit3, Save, X, Eye, EyeOff,
@@ -64,8 +64,8 @@ export function SettingsApp({
   const [tab,      setTab]     = useState("widget")
   const [isMobile, setIsMobile] = useState(false)
 
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768)
+  useLayoutEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 1024)
     check()
     window.addEventListener("resize", check)
     return () => window.removeEventListener("resize", check)
@@ -169,8 +169,8 @@ export function SettingsApp({
     const inputStyle: React.CSSProperties = {
       width: "100%", padding: "12px 14px", borderRadius: 0,
       border: "none", borderBottom: `1px solid ${IOS.sep}`,
-      background: "transparent", fontSize: 15, outline: "none",
-      color: IOS.label, boxSizing: "border-box",
+      background: "transparent", fontSize: 16, outline: "none",
+      minHeight: 44, color: IOS.label, boxSizing: "border-box",
     }
     const textareaStyle: React.CSSProperties = {
       ...inputStyle, resize: "vertical" as const, fontFamily: "inherit", minHeight: 72,

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useLayoutEffect } from "react"
 import { useRouter } from "next/navigation"
 import { MessageCircle, Loader, Eye, EyeOff } from "lucide-react"
 
@@ -13,8 +13,8 @@ export default function LoginPage() {
   const [loading,  setLoading]  = useState(false)
   const [isMobile, setIsMobile] = useState(false)
 
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 768)
+  useLayoutEffect(() => {
+    const check = () => setIsMobile(window.innerWidth < 1024)
     check()
     window.addEventListener("resize", check)
     return () => window.removeEventListener("resize", check)
@@ -47,7 +47,8 @@ export default function LoginPage() {
     borderRadius: 14,
     border: dark ? "1.5px solid rgba(255,255,255,0.1)" : "1.5px solid #E5E7EB",
     background: dark ? "rgba(255,255,255,0.06)" : "#FAFAFA",
-    fontSize: 15,
+    fontSize: 16,
+    minHeight: 48,
     outline: "none",
     boxSizing: "border-box" as const,
     color: dark ? "white" : "#111",

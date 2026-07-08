@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useRef, useCallback } from "react"
+import { useState, useEffect, useLayoutEffect, useRef, useCallback } from "react"
 import {
   MessageCircle, Send, LogOut, Search, Clock, CheckCheck,
   Check, Zap, XCircle, RotateCcw, ArrowLeft,
@@ -144,7 +144,7 @@ export function OperatorApp({
   const quickReplies = settings?.quickReplies ?? []
   const totalUnread  = sessions.reduce((a, s) => a + (s.unreadCount ?? 0), 0)
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const check = () => setIsMobile(window.innerWidth < 1024)
     check()
     window.addEventListener("resize", check)
@@ -306,7 +306,7 @@ export function OperatorApp({
               <div style={{ margin: "0 16px 12px", display: "flex", alignItems: "center", gap: 8, background: IOS.bg3, borderRadius: 10, padding: "8px 12px" }}>
                 <Search size={14} color={IOS.label3} />
                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Поиск"
-                  style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 15, color: IOS.label }} />
+                  style={{ flex: 1, border: "none", background: "transparent", outline: "none", fontSize: 16, color: IOS.label }} />
               </div>
             </div>
 
@@ -536,7 +536,7 @@ export function OperatorApp({
                       onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(input) } }}
                       placeholder="Сообщение..."
                       disabled={!isExternal && active?.status === "waiting" && !isMine}
-                      style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 15, color: IOS.label, padding: "10px 0", minWidth: 0 }} />
+                      style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontSize: 16, color: IOS.label, padding: "10px 0", minWidth: 0 }} />
                   </div>
                   <button onClick={() => send(input)} disabled={!input.trim() || sending}
                     style={{ width: 44, height: 44, borderRadius: "50%", border: "none", cursor: "pointer", background: input.trim() ? IOS.orange : IOS.bg4, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, transition: "background 0.15s" }}>
