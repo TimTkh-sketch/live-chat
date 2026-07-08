@@ -223,7 +223,8 @@ export function OperatorApp({
     fetchSessions()
   }
 
-  const accept   = () => activeId && patch(activeId, { status: "active", operatorId: currentOperator.id })
+  const accept      = () => activeId && patch(activeId, { status: "active", operatorId: currentOperator.id })
+  const quickAccept = (id: string, e: React.MouseEvent) => { e.stopPropagation(); patch(id, { status: "active", operatorId: currentOperator.id }) }
   const postpone = () => activeId && patch(activeId, { status: "postponed", postponedUntil: new Date(Date.now() + 5 * 60000).toISOString(), operatorId: null }).then(() => { setActiveId(null); setMessages([]); if (isMobile) setMobileView("list") })
   const close    = () => activeId && patch(activeId, { status: "closed" }).then(() => { setActiveId(null); setMessages([]); if (isMobile) setMobileView("list") })
   const reopen   = () => activeId && patch(activeId, { status: "waiting", operatorId: null }).then(fetchSessions)
@@ -386,7 +387,7 @@ export function OperatorApp({
                           </p>
                         </div>
 
-                        {/* Badge + chevron */}
+                        {/* Badge + accept / chevron */}
                         {!isSelecting && (
                           <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                             {(s.unreadCount ?? 0) > 0 && (
@@ -394,7 +395,14 @@ export function OperatorApp({
                                 {(s.unreadCount ?? 0) > 9 ? "9+" : s.unreadCount}
                               </span>
                             )}
-                            <ChevronRight size={16} color={IOS.label3} />
+                            {s.status === "waiting" && !s.operatorId && (!s.channel || s.channel === "web") ? (
+                              <button onClick={e => quickAccept(s.id, e)}
+                                style={{ padding: "5px 10px", borderRadius: 8, border: "none", background: IOS.green, color: "white", fontSize: 12, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>
+                                Принять
+                              </button>
+                            ) : (
+                              <ChevronRight size={16} color={IOS.label3} />
+                            )}
                           </div>
                         )}
                       </button>
@@ -761,10 +769,20 @@ export function OperatorApp({
           </div>
           <p style={{ fontSize: 12, color: "#6B7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>{lastMsg ? lastMsg.text : "Нет сообщений"}</p>
         </div>
-        {!isSelecting && (s.unreadCount ?? 0) > 0 && (
-          <span style={{ width: 18, height: 18, borderRadius: 99, background: color, color: "white", fontSize: 9, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
-            {(s.unreadCount ?? 0) > 9 ? "9+" : s.unreadCount}
-          </span>
+        {!isSelecting && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+            {(s.unreadCount ?? 0) > 0 && (
+              <span style={{ width: 18, height: 18, borderRadius: 99, background: color, color: "white", fontSize: 9, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {(s.unreadCount ?? 0) > 9 ? "9+" : s.unreadCount}
+              </span>
+            )}
+            {s.status === "waiting" && !s.operatorId && (!s.channel || s.channel === "web") && (
+              <button onClick={e => quickAccept(s.id, e)}
+                style={{ padding: "3px 8px", borderRadius: 6, border: "none", background: "#16a34a", color: "white", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                Принять
+              </button>
+            )}
+          </div>
         )}
       </button>
     )
