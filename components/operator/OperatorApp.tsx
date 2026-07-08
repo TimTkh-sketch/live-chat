@@ -224,7 +224,12 @@ export function OperatorApp({
   }
 
   const accept      = () => activeId && patch(activeId, { status: "active", operatorId: currentOperator.id })
-  const quickAccept = (id: string, e: React.MouseEvent) => { e.stopPropagation(); patch(id, { status: "active", operatorId: currentOperator.id }) }
+  const quickAccept = async (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    await patch(id, { status: "active", operatorId: currentOperator.id })
+    setFilter("active")
+    openSession(id)
+  }
   const postpone = () => activeId && patch(activeId, { status: "postponed", postponedUntil: new Date(Date.now() + 5 * 60000).toISOString(), operatorId: null }).then(() => { setActiveId(null); setMessages([]); if (isMobile) setMobileView("list") })
   const close    = () => activeId && patch(activeId, { status: "closed" }).then(() => { setActiveId(null); setMessages([]); if (isMobile) setMobileView("list") })
   const reopen   = () => activeId && patch(activeId, { status: "waiting", operatorId: null }).then(fetchSessions)
