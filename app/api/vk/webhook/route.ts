@@ -99,11 +99,28 @@ export async function POST(req: NextRequest) {
     })
     if (!session) return new NextResponse("ok")
 
-    await db.chatMessage.upsert({
-      where: { externalId: `vk_${msgId}` },
-      create: { sessionId: session.id, sender: "operator", text, externalId: `vk_${msgId}`, isRead: true },
-      update: {},
+    // Check if this message was already created by our app (race condition: webhook arrives before externalId is saved)
+    const recent = await db.chatMessage.findFirst({
+      where: {
+        sessionId: session.id,
+        sender: "operator",
+        text,
+        externalId: null,
+        createdAt: { gte: new Date(Date.now() - 10000) },
+      },
     })
+    if (recent) {
+      await db.chatMessage.update({
+        where: { id: recent.id },
+        data: { externalId: `vk_${msgId}` },
+      })
+    } else {
+      await db.chatMessage.upsert({
+        where: { externalId: `vk_${msgId}` },
+        create: { sessionId: session.id, sender: "operator", text, externalId: `vk_${msgId}`, isRead: true },
+        update: {},
+      })
+    }
     // Mark all unread visitor messages as read when operator replies
     await db.chatMessage.updateMany({
       where: { sessionId: session.id, sender: "visitor", isRead: false },
