@@ -2,16 +2,26 @@ import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
 import { sendPushToWorkspace } from "@/lib/push"
 import { sendTelegram, sendVk, sendAvito } from "@/lib/channels"
+import { getOperatorSession } from "@/lib/auth"
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const sessionId = searchParams.get("sessionId")
   if (!sessionId) return NextResponse.json({ error: "Missing sessionId" }, { status: 400 })
 
-  const messages = await db.chatMessage.findMany({
-    where: { sessionId },
-    orderBy: { createdAt: "asc" },
-  })
+  const [messages, op] = await Promise.all([
+    db.chatMessage.findMany({ where: { sessionId }, orderBy: { createdAt: "asc" } }),
+    getOperatorSession(),
+  ])
+
+  // Mark visitor messages as read when operator opens the chat
+  if (op) {
+    db.chatMessage.updateMany({
+      where: { sessionId, sender: "visitor", isRead: false },
+      data: { isRead: true },
+    }).catch(() => {})
+  }
+
   return NextResponse.json(messages)
 }
 
