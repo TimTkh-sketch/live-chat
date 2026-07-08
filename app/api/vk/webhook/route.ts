@@ -104,7 +104,29 @@ export async function POST(req: NextRequest) {
       create: { sessionId: session.id, sender: "operator", text, externalId: `vk_${msgId}`, isRead: true },
       update: {},
     })
+    // Mark all unread visitor messages as read when operator replies
+    await db.chatMessage.updateMany({
+      where: { sessionId: session.id, sender: "visitor", isRead: false },
+      data: { isRead: true },
+    })
     await db.chatSession.update({ where: { id: session.id }, data: { updatedAt: new Date() } })
+  }
+
+  // User read our messages in VK — mark operator messages as read
+  if (body.type === "message_read") {
+    const fromId = body.object?.from_id
+    if (fromId && Number(fromId) > 0) {
+      const userId = String(fromId)
+      const session = await db.chatSession.findFirst({
+        where: { channel: "vk", externalId: userId, status: { not: "closed" } },
+      })
+      if (session) {
+        await db.chatMessage.updateMany({
+          where: { sessionId: session.id, sender: "operator", isRead: false },
+          data: { isRead: true },
+        })
+      }
+    }
   }
 
   return new NextResponse("ok")
