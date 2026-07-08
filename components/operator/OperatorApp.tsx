@@ -10,7 +10,7 @@ import {
 import { formatTime, formatDate } from "@/lib/utils"
 
 interface Operator  { id: string; name: string; avatar: string | null; isOnline: boolean }
-interface Message   { id: string; sessionId: string; sender: string; text: string; createdAt: string; isRead: boolean }
+interface Message   { id: string; sessionId: string; sender: string; text: string; createdAt: string; isRead: boolean; attachmentUrl?: string }
 interface Session   {
   id: string; visitorName: string | null; visitorPage: string | null; status: string
   operatorId: string | null; postponedUntil: string | null; createdAt: string; updatedAt: string
@@ -406,7 +406,7 @@ export function OperatorApp({
                 </button>
                 <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, minWidth: 0, justifyContent: "center" }}>
                   <Avatar name={active?.visitorName ?? "П"} size={32} />
-                  <div style={{ minWidth: 0 }}>
+                  <div style={{ minWidth: 0, flex: 1, maxWidth: "calc(100% - 42px)" }}>
                     <p style={{ fontWeight: 600, fontSize: 15, color: IOS.label, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {active?.visitorName ?? "Посетитель"}
                     </p>
@@ -458,10 +458,8 @@ export function OperatorApp({
             </div>
 
             {/* Messages */}
-            <div style={{ flex: 1, overflowY: "auto", background: IOS.bg, display: "flex", flexDirection: "column", overscrollBehavior: "contain" }}>
-              {/* spacer pushes messages to bottom like Telegram */}
-              <div style={{ flex: 1 }} />
-              <div style={{ padding: "8px 14px 12px" }}>
+            <div style={{ flex: 1, overflowY: "auto", background: IOS.bg, overscrollBehavior: "contain" }}>
+              <div style={{ padding: "8px 14px 12px", boxSizing: "border-box", width: "100%", overflow: "hidden" }}>
                 {messages.length === 0 && (
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 0", color: IOS.label3, fontSize: 14 }}>Нет сообщений</div>
                 )}
@@ -475,24 +473,43 @@ export function OperatorApp({
                       const prev = group.msgs[i - 1]
                       const showAv = !isOp && (!prev || prev.sender !== m.sender)
                       return (
-                        <div key={m.id} style={{ display: "flex", flexDirection: "column", alignItems: isOp ? "flex-end" : "flex-start", marginBottom: 5 }}>
-                          <div style={{ display: "flex", alignItems: "flex-end", gap: 6, flexDirection: isOp ? "row-reverse" : "row" }}>
+                        <div key={m.id} style={{ marginBottom: 6 }}>
+                          {/* Bubble row — оператор справа, клиент слева */}
+                          <div style={{
+                            display: "flex",
+                            justifyContent: isOp ? "flex-end" : "flex-start",
+                            alignItems: "flex-end",
+                            gap: 6,
+                          }}>
                             {!isOp && (
                               <div style={{ width: 26, height: 26, flexShrink: 0, opacity: showAv ? 1 : 0 }}>
                                 <Avatar name={active?.visitorName ?? "П"} size={26} />
                               </div>
                             )}
                             <div style={{
-                              maxWidth: "76%", padding: "9px 14px",
+                              maxWidth: "75%",
+                              padding: "9px 14px",
                               borderRadius: isOp ? "18px 18px 5px 18px" : "18px 18px 18px 5px",
                               background: isOp ? IOS.orange : IOS.bg2,
                               color: IOS.label, fontSize: 15, lineHeight: 1.45,
                               wordBreak: "break-word",
+                              overflowWrap: "break-word",
+                              boxSizing: "border-box" as const,
+                              minWidth: 0,
                             }}>
                               {m.text}
+                              {m.attachmentUrl && (
+                                <img src={m.attachmentUrl} alt="" style={{ maxWidth: "100%", height: "auto", borderRadius: 8, marginTop: m.text ? 6 : 0, display: "block" }} />
+                              )}
                             </div>
                           </div>
-                          <div style={{ display: "flex", alignItems: "center", gap: 4, marginTop: 3, paddingLeft: isOp ? 0 : 32, justifyContent: isOp ? "flex-end" : "flex-start" }}>
+                          {/* Время и статус прочтения */}
+                          <div style={{
+                            display: "flex", alignItems: "center", gap: 4,
+                            marginTop: 3,
+                            paddingLeft: isOp ? 0 : 32,
+                            justifyContent: isOp ? "flex-end" : "flex-start",
+                          }}>
                             <span style={{ fontSize: 11, color: IOS.label3 }}>{formatTime(m.createdAt)}</span>
                             {isOp && (m.isRead ? <CheckCheck size={12} color={IOS.blue} /> : <Check size={12} color={IOS.label3} />)}
                           </div>
