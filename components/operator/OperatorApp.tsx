@@ -128,8 +128,10 @@ export function OperatorApp({
   const [search,     setSearch]     = useState("")
   const [notif,      setNotif]      = useState(false)
   const [showInfo,   setShowInfo]   = useState(true)
-  const [isMobile,   setIsMobile]   = useState(() => typeof window !== "undefined" && window.innerWidth < 1024)
-  const [mobileView, setMobileView] = useState<"list" | "chat">("list")
+  const [isMobile,     setIsMobile]     = useState(() => typeof window !== "undefined" && window.innerWidth < 1024)
+  const [mobileView,   setMobileView]   = useState<"list" | "chat">("list")
+  const [isSelecting,  setIsSelecting]  = useState(false)
+  const [selectedIds,  setSelectedIds]  = useState<Set<string>>(new Set())
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef  = useRef<HTMLInputElement>(null)
 
@@ -226,6 +228,20 @@ export function OperatorApp({
   const close    = () => activeId && patch(activeId, { status: "closed" }).then(() => { setActiveId(null); setMessages([]); if (isMobile) setMobileView("list") })
   const reopen   = () => activeId && patch(activeId, { status: "waiting", operatorId: null }).then(fetchSessions)
 
+  function toggleSelect(id: string) {
+    setSelectedIds(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n })
+  }
+  function exitSelect() { setIsSelecting(false); setSelectedIds(new Set()) }
+
+  async function bulkAction(status: string) {
+    const body: Record<string, unknown> = { status }
+    if (status === "postponed") { body.postponedUntil = new Date(Date.now() + 5 * 60000).toISOString(); body.operatorId = null }
+    if (status === "waiting")   { body.operatorId = null }
+    await Promise.all([...selectedIds].map(id => fetch(`/api/session/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })))
+    exitSelect()
+    fetchSessions()
+  }
+
   async function send(text: string) {
     if (!activeId || !text.trim() || sending) return
     setSending(true)
@@ -292,15 +308,22 @@ export function OperatorApp({
                   )}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 2 }}>
-                  <button onClick={handleNotif} style={{ background: "none", border: "none", cursor: "pointer", color: notif ? IOS.green : IOS.label3, padding: "6px 8px" }}>
-                    {notif ? <Bell size={20} /> : <BellOff size={20} />}
-                  </button>
-                  {canViewSettings && <a href="/settings" style={{ color: IOS.label3, display: "flex", alignItems: "center", padding: "6px 8px", textDecoration: "none" }}>
-                    <Settings2 size={20} />
-                  </a>}
-                  <button onClick={logout} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.label3, padding: "6px 8px" }}>
-                    <LogOut size={20} />
-                  </button>
+                  {isSelecting ? (
+                    <button onClick={exitSelect} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.orange, padding: "6px 8px", fontSize: 15, fontWeight: 600 }}>Отмена</button>
+                  ) : (
+                    <>
+                      <button onClick={handleNotif} style={{ background: "none", border: "none", cursor: "pointer", color: notif ? IOS.green : IOS.label3, padding: "6px 8px" }}>
+                        {notif ? <Bell size={20} /> : <BellOff size={20} />}
+                      </button>
+                      {canViewSettings && <a href="/settings" style={{ color: IOS.label3, display: "flex", alignItems: "center", padding: "6px 8px", textDecoration: "none" }}>
+                        <Settings2 size={20} />
+                      </a>}
+                      <button onClick={logout} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.label3, padding: "6px 8px" }}>
+                        <LogOut size={20} />
+                      </button>
+                      <button onClick={() => setIsSelecting(true)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.orange, padding: "6px 8px", fontSize: 14, fontWeight: 600 }}>Выбрать</button>
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -323,17 +346,24 @@ export function OperatorApp({
                 /* iOS-style grouped table */
                 <div style={{ margin: "20px 16px 0", background: IOS.bg2, borderRadius: 12, overflow: "hidden" }}>
                   {filtered.map((s, idx) => {
-                    const lastMsg = s.messages?.[0]
-                    const isLast  = idx === filtered.length - 1
+                    const lastMsg   = s.messages?.[0]
+                    const isLast    = idx === filtered.length - 1
                     const isTakenMe = s.operatorId === currentOperator.id
+                    const isSel     = selectedIds.has(s.id)
                     return (
-                      <button key={s.id} onClick={() => openSession(s.id)}
-                        style={{ width: "100%", textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: "11px 14px 11px 16px", display: "flex", alignItems: "center", gap: 12, borderBottom: isLast ? "none" : `1px solid ${IOS.sep}` }}>
-                        {/* Avatar with status dot */}
-                        <div style={{ position: "relative", flexShrink: 0 }}>
-                          <Avatar name={s.visitorName ?? "П"} size={46} />
-                          <span style={{ position: "absolute", bottom: 1, right: 1, width: 12, height: 12, borderRadius: "50%", background: STATUS_DOT[s.status] ?? IOS.bg4, border: `2px solid ${IOS.bg2}` }} />
-                        </div>
+                      <button key={s.id} onClick={() => isSelecting ? toggleSelect(s.id) : openSession(s.id)}
+                        style={{ width: "100%", textAlign: "left", border: "none", background: isSel ? IOS.bg3 : "transparent", cursor: "pointer", padding: "11px 14px 11px 16px", display: "flex", alignItems: "center", gap: 12, borderBottom: isLast ? "none" : `1px solid ${IOS.sep}` }}>
+                        {/* Checkbox (selection mode) or Avatar */}
+                        {isSelecting ? (
+                          <div style={{ width: 26, height: 26, borderRadius: "50%", flexShrink: 0, border: `2px solid ${isSel ? IOS.orange : IOS.label3}`, background: isSel ? IOS.orange : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {isSel && <Check size={14} color="white" />}
+                          </div>
+                        ) : (
+                          <div style={{ position: "relative", flexShrink: 0 }}>
+                            <Avatar name={s.visitorName ?? "П"} size={46} />
+                            <span style={{ position: "absolute", bottom: 1, right: 1, width: 12, height: 12, borderRadius: "50%", background: STATUS_DOT[s.status] ?? IOS.bg4, border: `2px solid ${IOS.bg2}` }} />
+                          </div>
+                        )}
 
                         {/* Info */}
                         <div style={{ flex: 1, minWidth: 0 }}>
@@ -352,14 +382,16 @@ export function OperatorApp({
                         </div>
 
                         {/* Badge + chevron */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                          {(s.unreadCount ?? 0) > 0 && (
-                            <span style={{ background: IOS.orange, color: "white", fontSize: 11, fontWeight: 700, minWidth: 20, height: 20, borderRadius: 99, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
-                              {(s.unreadCount ?? 0) > 9 ? "9+" : s.unreadCount}
-                            </span>
-                          )}
-                          <ChevronRight size={16} color={IOS.label3} />
-                        </div>
+                        {!isSelecting && (
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                            {(s.unreadCount ?? 0) > 0 && (
+                              <span style={{ background: IOS.orange, color: "white", fontSize: 11, fontWeight: 700, minWidth: 20, height: 20, borderRadius: 99, display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "0 5px" }}>
+                                {(s.unreadCount ?? 0) > 9 ? "9+" : s.unreadCount}
+                              </span>
+                            )}
+                            <ChevronRight size={16} color={IOS.label3} />
+                          </div>
+                        )}
                       </button>
                     )
                   })}
@@ -368,30 +400,58 @@ export function OperatorApp({
               <div style={{ height: 24 }} />
             </div>
 
-            {/* Tab bar */}
-            <div style={{ background: IOS.tabBarBg, borderTop: `1px solid ${IOS.sep}`, display: "flex", flexShrink: 0, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)" }}>
-              {TABS.map(tab => {
-                const Icon = tab.icon
-                const isActive = filter === tab.key
-                const tabColor = isActive
-                  ? (tab.key === "vk" ? "#0077FF" : tab.key === "avito" ? "#00B140" : IOS.orange)
-                  : IOS.label3
-                const cnt = tab.key === "waiting" ? totalUnread : 0
-                return (
-                  <button key={tab.key}
-                    onClick={() => { setFilter(tab.key); setActiveId(null); setMessages([]) }}
-                    style={{ flex: 1, padding: "8px 0 6px", border: "none", background: "transparent", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, color: tabColor, position: "relative", WebkitTapHighlightColor: "transparent" }}>
-                    <Icon size={20} color={tabColor} />
-                    <span style={{ fontSize: 9, fontWeight: isActive ? 600 : 400, letterSpacing: -0.1 }}>{tab.label}</span>
-                    {cnt > 0 && (
-                      <span style={{ position: "absolute", top: 6, right: "10%", minWidth: 15, height: 15, borderRadius: 99, background: IOS.red, color: "white", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
-                        {cnt > 9 ? "9+" : cnt}
-                      </span>
-                    )}
-                  </button>
-                )
-              })}
-            </div>
+            {/* Tab bar / bulk action bar */}
+            {isSelecting ? (
+              <div style={{ background: IOS.bg2, borderTop: `1px solid ${IOS.sep}`, flexShrink: 0, padding: "10px 16px", paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 10px)" }}>
+                <div style={{ fontSize: 12, color: IOS.label3, marginBottom: 10, textAlign: "center" }}>
+                  {selectedIds.size > 0 ? `Выбрано: ${selectedIds.size}` : "Нажмите на диалоги для выбора"}
+                </div>
+                <div style={{ display: "flex", gap: 8 }}>
+                  {filter !== "closed" && (
+                    <button onClick={() => bulkAction("postponed")} disabled={selectedIds.size === 0}
+                      style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", cursor: "pointer", background: selectedIds.size > 0 ? IOS.blue : IOS.bg3, color: "white", fontWeight: 600, fontSize: 14, opacity: selectedIds.size === 0 ? 0.4 : 1 }}>
+                      Отложить
+                    </button>
+                  )}
+                  {filter !== "closed" && (
+                    <button onClick={() => bulkAction("closed")} disabled={selectedIds.size === 0}
+                      style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", cursor: "pointer", background: selectedIds.size > 0 ? IOS.red : IOS.bg3, color: "white", fontWeight: 600, fontSize: 14, opacity: selectedIds.size === 0 ? 0.4 : 1 }}>
+                      Закрыть
+                    </button>
+                  )}
+                  {filter === "closed" && (
+                    <button onClick={() => bulkAction("waiting")} disabled={selectedIds.size === 0}
+                      style={{ flex: 1, padding: "10px 0", borderRadius: 10, border: "none", cursor: "pointer", background: selectedIds.size > 0 ? IOS.green : IOS.bg3, color: "white", fontWeight: 600, fontSize: 14, opacity: selectedIds.size === 0 ? 0.4 : 1 }}>
+                      Открыть
+                    </button>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div style={{ background: IOS.tabBarBg, borderTop: `1px solid ${IOS.sep}`, display: "flex", flexShrink: 0, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)" }}>
+                {TABS.map(tab => {
+                  const Icon = tab.icon
+                  const isActive = filter === tab.key
+                  const tabColor = isActive
+                    ? (tab.key === "vk" ? "#0077FF" : tab.key === "avito" ? "#00B140" : IOS.orange)
+                    : IOS.label3
+                  const cnt = tab.key === "waiting" ? totalUnread : 0
+                  return (
+                    <button key={tab.key}
+                      onClick={() => { setFilter(tab.key); setActiveId(null); setMessages([]); exitSelect() }}
+                      style={{ flex: 1, padding: "8px 0 6px", border: "none", background: "transparent", cursor: "pointer", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, color: tabColor, position: "relative", WebkitTapHighlightColor: "transparent" }}>
+                      <Icon size={20} color={tabColor} />
+                      <span style={{ fontSize: 9, fontWeight: isActive ? 600 : 400, letterSpacing: -0.1 }}>{tab.label}</span>
+                      {cnt > 0 && (
+                        <span style={{ position: "absolute", top: 6, right: "10%", minWidth: 15, height: 15, borderRadius: 99, background: IOS.red, color: "white", fontSize: 9, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 3px" }}>
+                          {cnt > 9 ? "9+" : cnt}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
           </>
         )}
 
@@ -663,16 +723,23 @@ export function OperatorApp({
   }
 
   const renderSessionItem = (s: Session) => {
-    const isSelected = s.id === activeId
-    const lastMsg    = s.messages?.[0]
-    const isTakenOt  = s.operatorId && s.operatorId !== currentOperator.id
+    const isActive  = s.id === activeId
+    const isSel     = selectedIds.has(s.id)
+    const lastMsg   = s.messages?.[0]
+    const isTakenOt = s.operatorId && s.operatorId !== currentOperator.id
     return (
-      <button key={s.id} onClick={() => openSession(s.id)}
-        style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", padding: "12px 16px", background: isSelected ? "#FFF5EF" : "transparent", borderLeft: isSelected ? `3px solid ${color}` : "3px solid transparent", borderBottom: "1px solid #F3F4F6", transition: "all 0.12s", display: "flex", gap: 10, alignItems: "flex-start", opacity: isTakenOt ? 0.55 : 1 }}>
-        <div style={{ width: 38, height: 38, borderRadius: "50%", flexShrink: 0, background: "#FFF5EF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14, color, position: "relative" }}>
-          {(s.visitorName ?? "П")[0].toUpperCase()}
-          <span style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, borderRadius: "50%", border: "2px solid white", background: STATUS_DOT[s.status] ?? "#9CA3AF" }} />
-        </div>
+      <button key={s.id} onClick={() => isSelecting ? toggleSelect(s.id) : openSession(s.id)}
+        style={{ width: "100%", textAlign: "left", border: "none", cursor: "pointer", padding: "12px 16px", background: isSel ? "#FFF5EF" : isActive ? "#FFF5EF" : "transparent", borderLeft: (isSel || isActive) ? `3px solid ${color}` : "3px solid transparent", borderBottom: "1px solid #F3F4F6", transition: "all 0.12s", display: "flex", gap: 10, alignItems: "flex-start", opacity: isTakenOt && !isSelecting ? 0.55 : 1 }}>
+        {isSelecting ? (
+          <div style={{ width: 22, height: 22, borderRadius: "50%", flexShrink: 0, marginTop: 8, border: `2px solid ${isSel ? color : "#D1D5DB"}`, background: isSel ? color : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {isSel && <Check size={12} color="white" />}
+          </div>
+        ) : (
+          <div style={{ width: 38, height: 38, borderRadius: "50%", flexShrink: 0, background: "#FFF5EF", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: 14, color, position: "relative" }}>
+            {(s.visitorName ?? "П")[0].toUpperCase()}
+            <span style={{ position: "absolute", bottom: 0, right: 0, width: 10, height: 10, borderRadius: "50%", border: "2px solid white", background: STATUS_DOT[s.status] ?? "#9CA3AF" }} />
+          </div>
+        )}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 4 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 5, minWidth: 0 }}>
@@ -683,7 +750,7 @@ export function OperatorApp({
           </div>
           <p style={{ fontSize: 12, color: "#6B7280", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", marginTop: 2 }}>{lastMsg ? lastMsg.text : "Нет сообщений"}</p>
         </div>
-        {(s.unreadCount ?? 0) > 0 && (
+        {!isSelecting && (s.unreadCount ?? 0) > 0 && (
           <span style={{ width: 18, height: 18, borderRadius: 99, background: color, color: "white", fontSize: 9, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 2 }}>
             {(s.unreadCount ?? 0) > 9 ? "9+" : s.unreadCount}
           </span>
@@ -732,7 +799,13 @@ export function OperatorApp({
         <div style={{ padding: "18px 16px 12px", borderBottom: "1px solid #F3F4F6" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
             <h2 style={{ fontWeight: 700, fontSize: 15, color: "#111", margin: 0 }}>{TABS.find(t => t.key === filter)?.label}</h2>
-            {totalUnread > 0 && filter === "waiting" && <span style={{ background: "#ef4444", color: "white", fontSize: 10, fontWeight: 900, padding: "2px 7px", borderRadius: 99 }}>{totalUnread}</span>}
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              {totalUnread > 0 && filter === "waiting" && <span style={{ background: "#ef4444", color: "white", fontSize: 10, fontWeight: 900, padding: "2px 7px", borderRadius: 99 }}>{totalUnread}</span>}
+              {isSelecting
+                ? <button onClick={exitSelect} style={{ background: "none", border: "none", cursor: "pointer", color: color, fontSize: 12, fontWeight: 600, padding: 0 }}>Отмена</button>
+                : <button onClick={() => setIsSelecting(true)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", fontSize: 12, fontWeight: 500, padding: 0 }}>Выбрать</button>
+              }
+            </div>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, background: "#F7F8FA", borderRadius: 10, padding: "8px 12px" }}>
             <Search size={13} color="#9CA3AF" />
@@ -744,6 +817,33 @@ export function OperatorApp({
             ? <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 200, gap: 8, color: "#D1D5DB" }}><Inbox size={32} /><p style={{ fontSize: 13 }}>Пусто</p></div>
             : filtered.map(s => renderSessionItem(s))}
         </div>
+        {isSelecting && (
+          <div style={{ borderTop: "1px solid #F3F4F6", padding: "10px 12px", background: "white" }}>
+            <div style={{ fontSize: 11, color: "#9CA3AF", textAlign: "center", marginBottom: 8 }}>
+              {selectedIds.size > 0 ? `Выбрано: ${selectedIds.size}` : "Выберите диалоги"}
+            </div>
+            <div style={{ display: "flex", gap: 6 }}>
+              {filter !== "closed" && (
+                <button onClick={() => bulkAction("postponed")} disabled={selectedIds.size === 0}
+                  style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "none", cursor: "pointer", background: selectedIds.size > 0 ? "#EFF6FF" : "#F9FAFB", color: selectedIds.size > 0 ? "#2563EB" : "#D1D5DB", fontWeight: 600, fontSize: 12, opacity: selectedIds.size === 0 ? 0.5 : 1 }}>
+                  Отложить
+                </button>
+              )}
+              {filter !== "closed" && (
+                <button onClick={() => bulkAction("closed")} disabled={selectedIds.size === 0}
+                  style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "none", cursor: "pointer", background: selectedIds.size > 0 ? "#FEF2F2" : "#F9FAFB", color: selectedIds.size > 0 ? "#DC2626" : "#D1D5DB", fontWeight: 600, fontSize: 12, opacity: selectedIds.size === 0 ? 0.5 : 1 }}>
+                  Закрыть
+                </button>
+              )}
+              {filter === "closed" && (
+                <button onClick={() => bulkAction("waiting")} disabled={selectedIds.size === 0}
+                  style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "none", cursor: "pointer", background: selectedIds.size > 0 ? "#F0FDF4" : "#F9FAFB", color: selectedIds.size > 0 ? "#16A34A" : "#D1D5DB", fontWeight: 600, fontSize: 12, opacity: selectedIds.size === 0 ? 0.5 : 1 }}>
+                  Открыть
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", minWidth: 0 }}>
