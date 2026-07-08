@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { db } from "@/lib/db"
+import { getOperatorSession } from "@/lib/auth"
 
 export async function POST(req: NextRequest) {
   const { token, visitorPage, visitorName, visitorEmail } = await req.json()
@@ -31,11 +32,12 @@ export async function GET(req: NextRequest) {
   if (!workspaceId) return NextResponse.json({ error: "Missing workspaceId" }, { status: 400 })
 
   const externalChannels = ["vk", "avito"]
+  const op = await getOperatorSession()
 
   const where = channel
     ? { workspaceId, channel, NOT: { status: "closed" } }
     : status === "active"
-      ? { workspaceId, status: { in: ["active", "postponed"] }, NOT: { channel: { in: externalChannels } } }
+      ? { workspaceId, status: { in: ["active", "postponed"] }, NOT: { channel: { in: externalChannels } }, ...(op ? { operatorId: op.id } : {}) }
       : { workspaceId, status, NOT: { channel: { in: externalChannels } } }
 
   const [sessions, total] = await Promise.all([
