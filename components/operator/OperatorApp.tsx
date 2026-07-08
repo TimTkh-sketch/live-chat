@@ -32,6 +32,10 @@ function ChannelBadge({ channel }: { channel?: string }) {
   return null
 }
 interface ChatSettings { quickReplies: string[]; greeting: string; primaryColor: string; operatorName: string }
+type QuickReply = { name: string; text: string }
+function parseQuickReplies(raw: string[]): QuickReply[] {
+  return raw.map(r => { try { const p = JSON.parse(r); if (p?.name !== undefined) return p } catch {} return { name: r, text: r } })
+}
 
 function VkIcon({ size = 22, color = "currentColor" }: { size?: number; color?: string }) {
   return (
@@ -145,7 +149,7 @@ export function OperatorApp({
   const canViewSettings = currentOperator.canManageSettings || currentOperator.canManageOperators || currentOperator.canManageChannels || currentOperator.canManageReplies
 
   const color        = settings?.primaryColor ?? "#F26522"
-  const quickReplies = settings?.quickReplies ?? []
+  const quickReplies = parseQuickReplies(settings?.quickReplies ?? [])
   const totalUnread  = sessions.reduce((a, s) => a + (s.unreadCount ?? 0), 0)
 
   useLayoutEffect(() => {
@@ -612,9 +616,9 @@ export function OperatorApp({
             {quickReplies.length > 0 && canWrite && (
               <div style={{ padding: "6px 12px", display: "flex", gap: 6, overflowX: "auto", borderTop: `1px solid ${IOS.sep}`, background: IOS.bg2, flexShrink: 0 }}>
                 {quickReplies.map((qr, i) => (
-                  <button key={i} onClick={() => send(qr)}
+                  <button key={i} onClick={() => send(qr.text)}
                     style={{ padding: "6px 14px", borderRadius: 99, border: `1px solid ${IOS.sep}`, background: IOS.bg3, color: IOS.label2, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0 }}>
-                    {qr}
+                    {qr.name}
                   </button>
                 ))}
               </div>
@@ -740,7 +744,7 @@ export function OperatorApp({
       <div style={{ padding: "8px 16px", display: "flex", gap: 6, flexWrap: "wrap", background: "white", borderTop: "1px solid #F3F4F6" }}>
         <span style={{ fontSize: 11, color: "#9CA3AF", display: "flex", alignItems: "center", gap: 4, marginRight: 4 }}><Zap size={11} color={color} /> Быстрые:</span>
         {quickReplies.map((qr, i) => (
-          <button key={i} onClick={() => send(qr)} style={{ padding: "5px 12px", borderRadius: 99, border: "1px solid #E5E7EB", background: "transparent", color: "#374151", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{qr}</button>
+          <button key={i} onClick={() => send(qr.text)} style={{ padding: "5px 12px", borderRadius: 99, border: "1px solid #E5E7EB", background: "transparent", color: "#374151", fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{qr.name}</button>
         ))}
       </div>
     )

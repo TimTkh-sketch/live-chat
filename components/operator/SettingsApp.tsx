@@ -16,6 +16,13 @@ interface ChatSettings {
   greeting: string; offlineText: string; primaryColor: string
   quickReplies: string[]; operatorName: string; operatorAvatar: string | null
 }
+type QuickReply = { name: string; text: string }
+function parseReplies(raw: string[]): QuickReply[] {
+  return raw.map(r => { try { const p = JSON.parse(r); if (p?.name !== undefined) return p } catch {} return { name: r, text: r } })
+}
+function serializeReplies(list: QuickReply[]): string[] {
+  return list.map(r => JSON.stringify(r))
+}
 
 const COLORS = ["#F26522","#6366F1","#0EA5E9","#10B981","#EF4444","#F59E0B","#8B5CF6","#EC4899","#14B8A6","#1a1a1a"]
 const TABS = [
@@ -103,16 +110,18 @@ export function SettingsApp({
   const [savingWidget, setSavingWidget] = useState(false)
   const [savedWidget,  setSavedWidget]  = useState(false)
 
-  const [replies,       setReplies]       = useState<string[]>(initialSettings?.quickReplies ?? [])
-  const [newReply,      setNewReply]      = useState("")
+  const [replies,       setReplies]       = useState<QuickReply[]>(() => parseReplies(initialSettings?.quickReplies ?? []))
+  const [newName,      setNewName]       = useState("")
+  const [newText,      setNewText]       = useState("")
   const [editIdx,       setEditIdx]       = useState<number | null>(null)
-  const [editVal,       setEditVal]       = useState("")
+  const [editName,      setEditName]      = useState("")
+  const [editText,      setEditText]      = useState("")
   const [savingReplies, setSavingReplies] = useState(false)
   const [savedReplies,  setSavedReplies]  = useState(false)
 
   const [operators,   setOperators]   = useState<Operator[]>(initialOperators)
   const [showAddForm, setShowAddForm] = useState(false)
-  const [newName,     setNewName]     = useState("")
+  const [newOpName,   setNewOpName]   = useState("")
   const [newEmail,    setNewEmail]    = useState("")
   const [newPass,     setNewPass]     = useState("")
   const [showPass,    setShowPass]    = useState(false)
@@ -139,17 +148,18 @@ export function SettingsApp({
     setTimeout(() => setSavedWidget(false), 2500)
   }
 
-  async function saveReplies(list: string[]) {
+  async function saveReplies(list: QuickReply[]) {
     setSavingReplies(true)
-    await fetch("/api/workspace/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quickReplies: list }) })
+    await fetch("/api/workspace/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ quickReplies: serializeReplies(list) }) })
     setSavingReplies(false); setSavedReplies(true)
     setTimeout(() => setSavedReplies(false), 2000)
   }
 
   function addReply() {
-    if (!newReply.trim()) return
-    const list = [...replies, newReply.trim()]
-    setReplies(list); setNewReply(""); saveReplies(list)
+    if (!newName.trim() || !newText.trim()) return
+    const item: QuickReply = { name: newName.trim(), text: newText.trim() }
+    const list = [...replies, item]
+    setReplies(list); setNewName(""); setNewText(""); saveReplies(list)
   }
 
   function removeReply(i: number) {
@@ -157,21 +167,21 @@ export function SettingsApp({
     setReplies(list); saveReplies(list)
   }
 
-  function startEdit(i: number) { setEditIdx(i); setEditVal(replies[i]) }
+  function startEdit(i: number) { setEditIdx(i); setEditName(replies[i].name); setEditText(replies[i].text) }
   function saveEdit() {
-    if (editIdx === null || !editVal.trim()) return
-    const list = replies.map((r, i) => i === editIdx ? editVal.trim() : r)
+    if (editIdx === null || !editName.trim() || !editText.trim()) return
+    const list = replies.map((r, i) => i === editIdx ? { name: editName.trim(), text: editText.trim() } : r)
     setReplies(list); setEditIdx(null); saveReplies(list)
   }
 
   async function addOperator() {
-    if (!newName.trim() || !newEmail.trim() || !newPass.trim()) { setAddError("Заполните все поля"); return }
+    if (!newOpName.trim() || !newEmail.trim() || !newPass.trim()) { setAddError("Заполните все поля"); return }
     setAddingOp(true); setAddError("")
-    const r = await fetch("/api/operators", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newName, email: newEmail, password: newPass, ...newPerms }) })
+    const r = await fetch("/api/operators", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newOpName, email: newEmail, password: newPass, ...newPerms }) })
     const data = await r.json()
     if (!r.ok) { setAddError(data.error || "Ошибка"); setAddingOp(false); return }
     setOperators(prev => [...prev, { ...data, isOnline: false, lastSeenAt: null, createdAt: new Date().toISOString(), ...newPerms }])
-    setNewName(""); setNewEmail(""); setNewPass(""); setShowAddForm(false); setAddingOp(false)
+    setNewOpName(""); setNewEmail(""); setNewPass(""); setShowAddForm(false); setAddingOp(false)
     setNewPerms({ canManageSettings: false, canManageOperators: false, canManageChannels: false, canManageReplies: false })
   }
 
@@ -352,7 +362,7 @@ export function SettingsApp({
           {showAddForm && (
             <Section label="Новый оператор">
               <Row label="Имя" last={false}>
-                <input value={newName} onChange={e => setNewName(e.target.value)} placeholder="Иван Петров"
+                <input value={newOpName} onChange={e => setNewOpName(e.target.value)} placeholder="Иван Петров"
                   style={{ ...inputStyle, flex: 1, textAlign: "right", borderBottom: "none", padding: "12px 0" }} />
               </Row>
               <Row label="Email" last={false}>
@@ -399,14 +409,20 @@ export function SettingsApp({
       if (tab === "replies") return (
         <div>
           <Section label="Добавить">
-            <div style={{ display: "flex", alignItems: "center", padding: "0 16px" }}>
-              <input value={newReply} onChange={e => setNewReply(e.target.value)} onKeyDown={e => e.key === "Enter" && addReply()}
-                placeholder="Например: Условия доставки"
-                style={{ ...inputStyle, flex: 1, borderBottom: "none", padding: "12px 0" }} />
-              <button onClick={addReply} disabled={!newReply.trim()}
-                style={{ background: "none", border: "none", cursor: "pointer", color: newReply.trim() ? IOS.orange : IOS.label3, padding: "0 0 0 8px", flexShrink: 0 }}>
-                <Plus size={22} />
-              </button>
+            <div style={{ padding: "10px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+              <input value={newName} onChange={e => setNewName(e.target.value)}
+                placeholder="Название (напр.: Трейд-ин)"
+                style={{ ...inputStyle, borderBottom: "none", padding: "10px 0", fontSize: 15 }} />
+              <div style={{ height: 1, background: IOS.sep }} />
+              <div style={{ display: "flex", alignItems: "center" }}>
+                <input value={newText} onChange={e => setNewText(e.target.value)} onKeyDown={e => e.key === "Enter" && addReply()}
+                  placeholder="Текст ответа для клиента"
+                  style={{ ...inputStyle, flex: 1, borderBottom: "none", padding: "10px 0", fontSize: 14, color: IOS.label2 }} />
+                <button onClick={addReply} disabled={!newName.trim() || !newText.trim()}
+                  style={{ background: "none", border: "none", cursor: "pointer", color: (newName.trim() && newText.trim()) ? IOS.orange : IOS.label3, padding: "0 0 0 8px", flexShrink: 0 }}>
+                  <Plus size={22} />
+                </button>
+              </div>
             </div>
           </Section>
 
@@ -424,22 +440,32 @@ export function SettingsApp({
           ) : (
             <Section label={`Быстрые ответы · ${replies.length}`}>
               {replies.map((r, i) => (
-                <div key={i} style={{ display: "flex", alignItems: "center", padding: "0 16px", borderBottom: i === replies.length - 1 ? "none" : `1px solid ${IOS.sep}` }}>
-                  <Zap size={14} color={IOS.orange} style={{ flexShrink: 0, marginRight: 10 }} />
+                <div key={i} style={{ padding: "0 16px", borderBottom: i === replies.length - 1 ? "none" : `1px solid ${IOS.sep}` }}>
                   {editIdx === i ? (
-                    <>
-                      <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
+                    <div style={{ padding: "10px 0", display: "flex", flexDirection: "column", gap: 6 }}>
+                      <input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
+                        placeholder="Название"
+                        style={{ ...inputStyle, borderBottom: "none", padding: "8px 0", fontSize: 15 }} />
+                      <div style={{ height: 1, background: IOS.sep }} />
+                      <input value={editText} onChange={e => setEditText(e.target.value)}
                         onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditIdx(null) }}
-                        style={{ ...inputStyle, flex: 1, borderBottom: "none", padding: "12px 0" }} />
-                      <button onClick={saveEdit} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.green, padding: "0 4px" }}><Check size={18} /></button>
-                      <button onClick={() => setEditIdx(null)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.label3, padding: "0 0 0 4px" }}><X size={18} /></button>
-                    </>
+                        placeholder="Текст ответа"
+                        style={{ ...inputStyle, borderBottom: "none", padding: "8px 0", fontSize: 14, color: IOS.label2 }} />
+                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                        <button onClick={saveEdit} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.green }}><Check size={18} /></button>
+                        <button onClick={() => setEditIdx(null)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.label3 }}><X size={18} /></button>
+                      </div>
+                    </div>
                   ) : (
-                    <>
-                      <span style={{ flex: 1, fontSize: 15, color: IOS.label, padding: "13px 0" }}>{r}</span>
-                      <button onClick={() => startEdit(i)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.label3, padding: "4px 6px" }}><Edit3 size={15} /></button>
-                      <button onClick={() => removeReply(i)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.red, padding: "4px 0" }}><Trash2 size={15} /></button>
-                    </>
+                    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0" }}>
+                      <Zap size={14} color={IOS.orange} style={{ flexShrink: 0 }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 15, color: IOS.label, fontWeight: 600 }}>{r.name}</p>
+                        <p style={{ fontSize: 12, color: IOS.label3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.text}</p>
+                      </div>
+                      <button onClick={() => startEdit(i)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.label3, padding: "4px 6px", flexShrink: 0 }}><Edit3 size={15} /></button>
+                      <button onClick={() => removeReply(i)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.red, padding: "4px 0", flexShrink: 0 }}><Trash2 size={15} /></button>
+                    </div>
                   )}
                 </div>
               ))}
@@ -639,7 +665,7 @@ export function SettingsApp({
                   <button onClick={() => setShowAddForm(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF" }}><X size={18} /></button>
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>
-                  <div><DLabel>Имя</DLabel><DInput value={newName} onChange={setNewName} placeholder="Иван Петров" /></div>
+                  <div><DLabel>Имя</DLabel><DInput value={newOpName} onChange={setNewOpName} placeholder="Иван Петров" /></div>
                   <div><DLabel>Email</DLabel><DInput value={newEmail} onChange={setNewEmail} placeholder="ivan@example.com" type="email" /></div>
                 </div>
                 <DLabel>Пароль</DLabel>
@@ -696,13 +722,18 @@ export function SettingsApp({
         {tab === "replies" && (
           <div style={{ maxWidth: 580 }}>
             <h1 style={{ fontSize: 22, fontWeight: 800, color: "#111", marginBottom: 4 }}>Быстрые ответы</h1>
-            <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 28 }}>Кнопки для операторов и клиентов — одним кликом отправить готовый ответ</p>
+            <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 28 }}>Оператор видит название — клиенту отправляется полный текст</p>
             <Card title="Добавить ответ">
-              <div style={{ display: "flex", gap: 10 }}>
-                <input value={newReply} onChange={e => setNewReply(e.target.value)} onKeyDown={e => e.key === "Enter" && addReply()}
-                  placeholder="Например: Условия доставки"
-                  style={{ flex: 1, padding: "10px 14px", borderRadius: 10, border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none", background: "#FAFAFA" }} />
-                <button onClick={addReply} disabled={!newReply.trim()} style={{ padding: "10px 18px", borderRadius: 10, background: color, color: "white", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer", opacity: newReply.trim() ? 1 : 0.5 }}><Plus size={16} /></button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div>
+                  <DLabel>Название (видит оператор)</DLabel>
+                  <DInput value={newName} onChange={setNewName} placeholder="Например: Трейд-ин" />
+                </div>
+                <div>
+                  <DLabel>Текст (отправляется клиенту)</DLabel>
+                  <DInput value={newText} onChange={setNewText} placeholder="Полный текст ответа..." />
+                </div>
+                <button onClick={addReply} disabled={!newName.trim() || !newText.trim()} style={{ alignSelf: "flex-end", padding: "9px 20px", borderRadius: 10, background: color, color: "white", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer", opacity: (newName.trim() && newText.trim()) ? 1 : 0.5, display: "flex", alignItems: "center", gap: 6 }}><Plus size={15} /> Добавить</button>
               </div>
             </Card>
             {replies.length === 0 ? (
@@ -710,20 +741,26 @@ export function SettingsApp({
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {replies.map((r, i) => (
-                  <div key={i} style={{ background: "white", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, border: "1px solid #F3F4F6" }}>
-                    <Zap size={14} color={color} style={{ flexShrink: 0 }} />
+                  <div key={i} style={{ background: "white", borderRadius: 12, padding: "12px 16px", border: "1px solid #F3F4F6" }}>
                     {editIdx === i ? (
-                      <>
-                        <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)} onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditIdx(null) }} style={{ flex: 1, padding: "6px 10px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none" }} />
-                        <button onClick={saveEdit} style={{ background: "none", border: "none", cursor: "pointer", color: "#16a34a" }}><Check size={16} /></button>
-                        <button onClick={() => setEditIdx(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF" }}><X size={16} /></button>
-                      </>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <input autoFocus value={editName} onChange={e => setEditName(e.target.value)} placeholder="Название" style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none", fontWeight: 600 }} />
+                        <input value={editText} onChange={e => setEditText(e.target.value)} onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditIdx(null) }} placeholder="Текст ответа" style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", color: "#6B7280" }} />
+                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                          <button onClick={saveEdit} style={{ background: "none", border: "none", cursor: "pointer", color: "#16a34a" }}><Check size={16} /></button>
+                          <button onClick={() => setEditIdx(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF" }}><X size={16} /></button>
+                        </div>
+                      </div>
                     ) : (
-                      <>
-                        <span style={{ flex: 1, fontSize: 14, color: "#374151" }}>{r}</span>
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <Zap size={14} color={color} style={{ flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>{r.name}</p>
+                          <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.text}</p>
+                        </div>
                         <button onClick={() => startEdit(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 4 }}><Edit3 size={14} /></button>
                         <button onClick={() => removeReply(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 4 }}><Trash2 size={14} /></button>
-                      </>
+                      </div>
                     )}
                   </div>
                 ))}
