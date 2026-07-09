@@ -362,7 +362,7 @@ export function ChatWidgetPage() {
                 }}>
                 {qr.name}
               </button>
-            )})
+            )})}
           </div>
         )}
 
