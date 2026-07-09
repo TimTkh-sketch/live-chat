@@ -5,7 +5,7 @@ import { Send, ChevronDown, Paperclip, Smile } from "lucide-react"
 
 interface Message { id: string; sender: string; text: string; attachmentUrl?: string; createdAt: string }
 interface Settings {
-  greeting: string; primaryColor: string; quickReplies: string[]
+  greeting: string; primaryColor: string; quickReplies: string[]; widgetReplies: string[]
   operatorName: string; operatorAvatar: string | null; offlineText: string
   privacyPolicyUrl: string
 }
@@ -332,7 +332,7 @@ export function ChatWidgetPage() {
         </div>
 
         {/* ── Quick replies ── */}
-        {settings.quickReplies.length > 0 && (
+        {(settings.widgetReplies ?? []).length > 0 && (
           <div style={{
             padding: "8px 12px",
             display: "flex",
@@ -344,8 +344,8 @@ export function ChatWidgetPage() {
             flexShrink: 0,
             WebkitOverflowScrolling: "touch",
           }}>
-            {settings.quickReplies.map((raw, i) => { const qr = parseQR(raw); return (
-              <button key={i} className="lc-qr" onClick={() => sendMessage(qr.name)}
+            {(settings.widgetReplies ?? []).map((label, i) => (
+              <button key={i} className="lc-qr" onClick={() => sendMessage(label)}
                 style={{
                   padding: "7px 16px",
                   borderRadius: 99,
@@ -360,9 +360,9 @@ export function ChatWidgetPage() {
                   WebkitTapHighlightColor: "transparent",
                   transition: "transform 0.1s",
                 }}>
-                {qr.name}
+                {label}
               </button>
-            )})}
+            ))}
           </div>
         )}
 

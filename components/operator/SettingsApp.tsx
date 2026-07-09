@@ -14,7 +14,7 @@ interface Operator {
 }
 interface ChatSettings {
   greeting: string; offlineText: string; primaryColor: string
-  quickReplies: string[]; operatorName: string; operatorAvatar: string | null
+  quickReplies: string[]; widgetReplies: string[]; operatorName: string; operatorAvatar: string | null
 }
 type QuickReply = { name: string; text: string }
 function parseReplies(raw: string[]): QuickReply[] {
@@ -119,6 +119,14 @@ export function SettingsApp({
   const [savingReplies, setSavingReplies] = useState(false)
   const [savedReplies,  setSavedReplies]  = useState(false)
 
+  const [widgetReplies,    setWidgetReplies]    = useState<string[]>(initialSettings?.widgetReplies ?? [])
+  const [newWidget,        setNewWidget]        = useState("")
+  const [editWidgetIdx,    setEditWidgetIdx]    = useState<number | null>(null)
+  const [editWidgetVal,    setEditWidgetVal]    = useState("")
+  const [savingWidget2,    setSavingWidget2]    = useState(false)
+  const [savedWidget2,     setSavedWidget2]     = useState(false)
+  const [repliesSubTab,    setRepliesSubTab]    = useState<"operator"|"widget">("operator")
+
   const [operators,   setOperators]   = useState<Operator[]>(initialOperators)
   const [showAddForm, setShowAddForm] = useState(false)
   const [newOpName,   setNewOpName]   = useState("")
@@ -172,6 +180,27 @@ export function SettingsApp({
     if (editIdx === null || !editName.trim() || !editText.trim()) return
     const list = replies.map((r, i) => i === editIdx ? { name: editName.trim(), text: editText.trim() } : r)
     setReplies(list); setEditIdx(null); saveReplies(list)
+  }
+
+  async function saveWidgetReplies(list: string[]) {
+    setSavingWidget2(true)
+    await fetch("/api/workspace/settings", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ widgetReplies: list }) })
+    setSavingWidget2(false); setSavedWidget2(true)
+    setTimeout(() => setSavedWidget2(false), 2000)
+  }
+  function addWidgetReply() {
+    if (!newWidget.trim()) return
+    const list = [...widgetReplies, newWidget.trim()]
+    setWidgetReplies(list); setNewWidget(""); saveWidgetReplies(list)
+  }
+  function removeWidgetReply(i: number) {
+    const list = widgetReplies.filter((_, idx) => idx !== i)
+    setWidgetReplies(list); saveWidgetReplies(list)
+  }
+  function saveWidgetEdit() {
+    if (editWidgetIdx === null || !editWidgetVal.trim()) return
+    const list = widgetReplies.map((r, i) => i === editWidgetIdx ? editWidgetVal.trim() : r)
+    setWidgetReplies(list); setEditWidgetIdx(null); saveWidgetReplies(list)
   }
 
   async function addOperator() {
@@ -408,68 +437,114 @@ export function SettingsApp({
       /* ── REPLIES ── */
       if (tab === "replies") return (
         <div>
-          <Section label="Добавить">
-            <div style={{ padding: "10px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
-              <input value={newName} onChange={e => setNewName(e.target.value)}
-                placeholder="Название (напр.: Трейд-ин)"
-                style={{ ...inputStyle, borderBottom: "none", padding: "10px 0", fontSize: 15 }} />
-              <div style={{ height: 1, background: IOS.sep }} />
-              <div style={{ display: "flex", alignItems: "center" }}>
-                <input value={newText} onChange={e => setNewText(e.target.value)} onKeyDown={e => e.key === "Enter" && addReply()}
-                  placeholder="Текст ответа для клиента"
-                  style={{ ...inputStyle, flex: 1, borderBottom: "none", padding: "10px 0", fontSize: 14, color: IOS.label2 }} />
-                <button onClick={addReply} disabled={!newName.trim() || !newText.trim()}
-                  style={{ background: "none", border: "none", cursor: "pointer", color: (newName.trim() && newText.trim()) ? IOS.orange : IOS.label3, padding: "0 0 0 8px", flexShrink: 0 }}>
-                  <Plus size={22} />
-                </button>
-              </div>
-            </div>
-          </Section>
+          {/* Sub-tab switcher */}
+          <div style={{ display: "flex", margin: "16px 16px 0", background: IOS.bg3, borderRadius: 10, padding: 3, gap: 2 }}>
+            {(["operator", "widget"] as const).map(st => (
+              <button key={st} onClick={() => setRepliesSubTab(st)}
+                style={{ flex: 1, padding: "7px 0", borderRadius: 8, border: "none", cursor: "pointer", background: repliesSubTab === st ? IOS.bg2 : "transparent", color: repliesSubTab === st ? IOS.label : IOS.label3, fontSize: 13, fontWeight: 600, transition: "all 0.15s" }}>
+                {st === "operator" ? "Для операторов" : "Виджет (клиенты)"}
+              </button>
+            ))}
+          </div>
 
-          {savedReplies && (
-            <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "12px 16px", color: IOS.green, fontSize: 13, fontWeight: 500 }}>
-              <Check size={14} /> Сохранено
+          {repliesSubTab === "operator" && (
+            <div>
+              <Section label="Добавить">
+                <div style={{ padding: "10px 16px", display: "flex", flexDirection: "column", gap: 8 }}>
+                  <input value={newName} onChange={e => setNewName(e.target.value)}
+                    placeholder="Название (напр.: Трейд-ин)"
+                    style={{ ...inputStyle, borderBottom: "none", padding: "10px 0", fontSize: 15 }} />
+                  <div style={{ height: 1, background: IOS.sep }} />
+                  <div style={{ display: "flex", alignItems: "center" }}>
+                    <input value={newText} onChange={e => setNewText(e.target.value)} onKeyDown={e => e.key === "Enter" && addReply()}
+                      placeholder="Текст ответа для клиента"
+                      style={{ ...inputStyle, flex: 1, borderBottom: "none", padding: "10px 0", fontSize: 14, color: IOS.label2 }} />
+                    <button onClick={addReply} disabled={!newName.trim() || !newText.trim()}
+                      style={{ background: "none", border: "none", cursor: "pointer", color: (newName.trim() && newText.trim()) ? IOS.orange : IOS.label3, padding: "0 0 0 8px", flexShrink: 0 }}>
+                      <Plus size={22} />
+                    </button>
+                  </div>
+                </div>
+              </Section>
+              {savedReplies && <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "12px 16px", color: IOS.green, fontSize: 13, fontWeight: 500 }}><Check size={14} /> Сохранено</div>}
+              {replies.length === 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 0", gap: 10 }}>
+                  <Zap size={40} color={IOS.label3} /><p style={{ color: IOS.label3, fontSize: 15 }}>Нет быстрых ответов</p>
+                </div>
+              ) : (
+                <Section label={`Быстрые ответы · ${replies.length}`}>
+                  {replies.map((r, i) => (
+                    <div key={i} style={{ padding: "0 16px", borderBottom: i === replies.length - 1 ? "none" : `1px solid ${IOS.sep}` }}>
+                      {editIdx === i ? (
+                        <div style={{ padding: "10px 0", display: "flex", flexDirection: "column", gap: 6 }}>
+                          <input autoFocus value={editName} onChange={e => setEditName(e.target.value)} placeholder="Название" style={{ ...inputStyle, borderBottom: "none", padding: "8px 0", fontSize: 15 }} />
+                          <div style={{ height: 1, background: IOS.sep }} />
+                          <input value={editText} onChange={e => setEditText(e.target.value)} onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditIdx(null) }} placeholder="Текст ответа" style={{ ...inputStyle, borderBottom: "none", padding: "8px 0", fontSize: 14, color: IOS.label2 }} />
+                          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                            <button onClick={saveEdit} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.green }}><Check size={18} /></button>
+                            <button onClick={() => setEditIdx(null)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.label3 }}><X size={18} /></button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0" }}>
+                          <Zap size={14} color={IOS.orange} style={{ flexShrink: 0 }} />
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 15, color: IOS.label, fontWeight: 600 }}>{r.name}</p>
+                            <p style={{ fontSize: 12, color: IOS.label3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.text}</p>
+                          </div>
+                          <button onClick={() => startEdit(i)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.label3, padding: "4px 6px", flexShrink: 0 }}><Edit3 size={15} /></button>
+                          <button onClick={() => removeReply(i)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.red, padding: "4px 0", flexShrink: 0 }}><Trash2 size={15} /></button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </Section>
+              )}
             </div>
           )}
 
-          {replies.length === 0 ? (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 0", gap: 10 }}>
-              <Zap size={40} color={IOS.label3} />
-              <p style={{ color: IOS.label3, fontSize: 15 }}>Нет быстрых ответов</p>
-            </div>
-          ) : (
-            <Section label={`Быстрые ответы · ${replies.length}`}>
-              {replies.map((r, i) => (
-                <div key={i} style={{ padding: "0 16px", borderBottom: i === replies.length - 1 ? "none" : `1px solid ${IOS.sep}` }}>
-                  {editIdx === i ? (
-                    <div style={{ padding: "10px 0", display: "flex", flexDirection: "column", gap: 6 }}>
-                      <input autoFocus value={editName} onChange={e => setEditName(e.target.value)}
-                        placeholder="Название"
-                        style={{ ...inputStyle, borderBottom: "none", padding: "8px 0", fontSize: 15 }} />
-                      <div style={{ height: 1, background: IOS.sep }} />
-                      <input value={editText} onChange={e => setEditText(e.target.value)}
-                        onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditIdx(null) }}
-                        placeholder="Текст ответа"
-                        style={{ ...inputStyle, borderBottom: "none", padding: "8px 0", fontSize: 14, color: IOS.label2 }} />
-                      <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                        <button onClick={saveEdit} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.green }}><Check size={18} /></button>
-                        <button onClick={() => setEditIdx(null)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.label3 }}><X size={18} /></button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 0" }}>
-                      <Zap size={14} color={IOS.orange} style={{ flexShrink: 0 }} />
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 15, color: IOS.label, fontWeight: 600 }}>{r.name}</p>
-                        <p style={{ fontSize: 12, color: IOS.label3, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.text}</p>
-                      </div>
-                      <button onClick={() => startEdit(i)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.label3, padding: "4px 6px", flexShrink: 0 }}><Edit3 size={15} /></button>
-                      <button onClick={() => removeReply(i)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.red, padding: "4px 0", flexShrink: 0 }}><Trash2 size={15} /></button>
-                    </div>
-                  )}
+          {repliesSubTab === "widget" && (
+            <div>
+              <Section label="Добавить кнопку" footer="Пользователь нажимает — отправляется это слово">
+                <div style={{ display: "flex", alignItems: "center", padding: "0 16px" }}>
+                  <input value={newWidget} onChange={e => setNewWidget(e.target.value)} onKeyDown={e => e.key === "Enter" && addWidgetReply()}
+                    placeholder="Напр.: Трейд-ин"
+                    style={{ ...inputStyle, flex: 1, borderBottom: "none", padding: "12px 0" }} />
+                  <button onClick={addWidgetReply} disabled={!newWidget.trim()}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: newWidget.trim() ? IOS.orange : IOS.label3, padding: "0 0 0 8px", flexShrink: 0 }}>
+                    <Plus size={22} />
+                  </button>
                 </div>
-              ))}
-            </Section>
+              </Section>
+              {savedWidget2 && <div style={{ display: "flex", alignItems: "center", gap: 6, margin: "12px 16px", color: IOS.green, fontSize: 13, fontWeight: 500 }}><Check size={14} /> Сохранено</div>}
+              {widgetReplies.length === 0 ? (
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", padding: "48px 0", gap: 10 }}>
+                  <Zap size={40} color={IOS.label3} /><p style={{ color: IOS.label3, fontSize: 15 }}>Нет кнопок виджета</p>
+                </div>
+              ) : (
+                <Section label={`Кнопки виджета · ${widgetReplies.length}`}>
+                  {widgetReplies.map((r, i) => (
+                    <div key={i} style={{ display: "flex", alignItems: "center", padding: "0 16px", borderBottom: i === widgetReplies.length - 1 ? "none" : `1px solid ${IOS.sep}` }}>
+                      {editWidgetIdx === i ? (
+                        <>
+                          <input autoFocus value={editWidgetVal} onChange={e => setEditWidgetVal(e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter") saveWidgetEdit(); if (e.key === "Escape") setEditWidgetIdx(null) }}
+                            style={{ ...inputStyle, flex: 1, borderBottom: "none", padding: "12px 0" }} />
+                          <button onClick={saveWidgetEdit} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.green, padding: "0 4px" }}><Check size={18} /></button>
+                          <button onClick={() => setEditWidgetIdx(null)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.label3, padding: "0 0 0 4px" }}><X size={18} /></button>
+                        </>
+                      ) : (
+                        <>
+                          <span style={{ flex: 1, fontSize: 15, color: IOS.label, padding: "13px 0" }}>{r}</span>
+                          <button onClick={() => { setEditWidgetIdx(i); setEditWidgetVal(r) }} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.label3, padding: "4px 6px" }}><Edit3 size={15} /></button>
+                          <button onClick={() => removeWidgetReply(i)} style={{ background: "none", border: "none", cursor: "pointer", color: IOS.red, padding: "4px 0" }}><Trash2 size={15} /></button>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </Section>
+              )}
+            </div>
           )}
         </div>
       )
@@ -721,52 +796,97 @@ export function SettingsApp({
 
         {tab === "replies" && (
           <div style={{ maxWidth: 580 }}>
-            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#111", marginBottom: 4 }}>Быстрые ответы</h1>
-            <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 28 }}>Оператор видит название — клиенту отправляется полный текст</p>
-            <Card title="Добавить ответ">
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <div>
-                  <DLabel>Название (видит оператор)</DLabel>
-                  <DInput value={newName} onChange={setNewName} placeholder="Например: Трейд-ин" />
-                </div>
-                <div>
-                  <DLabel>Текст (отправляется клиенту)</DLabel>
-                  <DInput value={newText} onChange={setNewText} placeholder="Полный текст ответа..." />
-                </div>
-                <button onClick={addReply} disabled={!newName.trim() || !newText.trim()} style={{ alignSelf: "flex-end", padding: "9px 20px", borderRadius: 10, background: color, color: "white", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer", opacity: (newName.trim() && newText.trim()) ? 1 : 0.5, display: "flex", alignItems: "center", gap: 6 }}><Plus size={15} /> Добавить</button>
-              </div>
-            </Card>
-            {replies.length === 0 ? (
-              <div style={{ textAlign: "center", padding: "40px 0", color: "#D1D5DB" }}><Zap size={32} style={{ margin: "0 auto 8px" }} /><p style={{ fontSize: 14 }}>Нет быстрых ответов</p></div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {replies.map((r, i) => (
-                  <div key={i} style={{ background: "white", borderRadius: 12, padding: "12px 16px", border: "1px solid #F3F4F6" }}>
-                    {editIdx === i ? (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                        <input autoFocus value={editName} onChange={e => setEditName(e.target.value)} placeholder="Название" style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none", fontWeight: 600 }} />
-                        <input value={editText} onChange={e => setEditText(e.target.value)} onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditIdx(null) }} placeholder="Текст ответа" style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", color: "#6B7280" }} />
-                        <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
-                          <button onClick={saveEdit} style={{ background: "none", border: "none", cursor: "pointer", color: "#16a34a" }}><Check size={16} /></button>
-                          <button onClick={() => setEditIdx(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF" }}><X size={16} /></button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                        <Zap size={14} color={color} style={{ flexShrink: 0 }} />
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>{r.name}</p>
-                          <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.text}</p>
-                        </div>
-                        <button onClick={() => startEdit(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 4 }}><Edit3 size={14} /></button>
-                        <button onClick={() => removeReply(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 4 }}><Trash2 size={14} /></button>
-                      </div>
-                    )}
+            <h1 style={{ fontSize: 22, fontWeight: 800, color: "#111", marginBottom: 16 }}>Быстрые ответы</h1>
+            {/* Sub-tab switcher */}
+            <div style={{ display: "flex", background: "#F3F4F6", borderRadius: 10, padding: 3, marginBottom: 24, gap: 2 }}>
+              {(["operator", "widget"] as const).map(st => (
+                <button key={st} onClick={() => setRepliesSubTab(st)}
+                  style={{ flex: 1, padding: "8px 0", borderRadius: 8, border: "none", cursor: "pointer", background: repliesSubTab === st ? "white" : "transparent", color: repliesSubTab === st ? "#111" : "#6B7280", fontSize: 13, fontWeight: 600, boxShadow: repliesSubTab === st ? "0 1px 3px rgba(0,0,0,0.1)" : "none", transition: "all 0.15s" }}>
+                  {st === "operator" ? "Для операторов" : "Виджет (клиенты)"}
+                </button>
+              ))}
+            </div>
+
+            {repliesSubTab === "operator" && (
+              <div>
+                <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 20 }}>Оператор видит название — клиенту отправляется полный текст</p>
+                <Card title="Добавить ответ">
+                  <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                    <div><DLabel>Название (видит оператор)</DLabel><DInput value={newName} onChange={setNewName} placeholder="Например: Трейд-ин" /></div>
+                    <div><DLabel>Текст (отправляется клиенту)</DLabel><DInput value={newText} onChange={setNewText} placeholder="Полный текст ответа..." /></div>
+                    <button onClick={addReply} disabled={!newName.trim() || !newText.trim()} style={{ alignSelf: "flex-end", padding: "9px 20px", borderRadius: 10, background: color, color: "white", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer", opacity: (newName.trim() && newText.trim()) ? 1 : 0.5, display: "flex", alignItems: "center", gap: 6 }}><Plus size={15} /> Добавить</button>
                   </div>
-                ))}
+                </Card>
+                {replies.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px 0", color: "#D1D5DB" }}><Zap size={32} style={{ margin: "0 auto 8px" }} /><p style={{ fontSize: 14 }}>Нет быстрых ответов</p></div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {replies.map((r, i) => (
+                      <div key={i} style={{ background: "white", borderRadius: 12, padding: "12px 16px", border: "1px solid #F3F4F6" }}>
+                        {editIdx === i ? (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                            <input autoFocus value={editName} onChange={e => setEditName(e.target.value)} placeholder="Название" style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none", fontWeight: 600 }} />
+                            <input value={editText} onChange={e => setEditText(e.target.value)} onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditIdx(null) }} placeholder="Текст ответа" style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", color: "#6B7280" }} />
+                            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                              <button onClick={saveEdit} style={{ background: "none", border: "none", cursor: "pointer", color: "#16a34a" }}><Check size={16} /></button>
+                              <button onClick={() => setEditIdx(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF" }}><X size={16} /></button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                            <Zap size={14} color={color} style={{ flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <p style={{ fontSize: 14, fontWeight: 600, color: "#111" }}>{r.name}</p>
+                              <p style={{ fontSize: 12, color: "#9CA3AF", marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{r.text}</p>
+                            </div>
+                            <button onClick={() => startEdit(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 4 }}><Edit3 size={14} /></button>
+                            <button onClick={() => removeReply(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 4 }}><Trash2 size={14} /></button>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {savedReplies && <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12, color: "#16a34a", fontSize: 13, fontWeight: 600 }}><Check size={14} /> Сохранено</div>}
               </div>
             )}
-            {savedReplies && <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12, color: "#16a34a", fontSize: 13, fontWeight: 600 }}><Check size={14} /> Сохранено</div>}
+
+            {repliesSubTab === "widget" && (
+              <div>
+                <p style={{ fontSize: 14, color: "#6B7280", marginBottom: 20 }}>Кнопки в виджете — пользователь нажимает и отправляется это слово</p>
+                <Card title="Добавить кнопку">
+                  <div style={{ display: "flex", gap: 10 }}>
+                    <DInput value={newWidget} onChange={setNewWidget} placeholder="Например: Трейд-ин" />
+                    <button onClick={addWidgetReply} disabled={!newWidget.trim()} style={{ padding: "10px 18px", borderRadius: 10, background: color, color: "white", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer", opacity: newWidget.trim() ? 1 : 0.5, flexShrink: 0 }}><Plus size={16} /></button>
+                  </div>
+                </Card>
+                {widgetReplies.length === 0 ? (
+                  <div style={{ textAlign: "center", padding: "40px 0", color: "#D1D5DB" }}><Zap size={32} style={{ margin: "0 auto 8px" }} /><p style={{ fontSize: 14 }}>Нет кнопок виджета</p></div>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                    {widgetReplies.map((r, i) => (
+                      <div key={i} style={{ background: "white", borderRadius: 12, padding: "12px 16px", display: "flex", alignItems: "center", gap: 12, border: "1px solid #F3F4F6" }}>
+                        <Zap size={14} color={color} style={{ flexShrink: 0 }} />
+                        {editWidgetIdx === i ? (
+                          <>
+                            <input autoFocus value={editWidgetVal} onChange={e => setEditWidgetVal(e.target.value)} onKeyDown={e => { if (e.key === "Enter") saveWidgetEdit(); if (e.key === "Escape") setEditWidgetIdx(null) }} style={{ flex: 1, padding: "6px 10px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 14, outline: "none" }} />
+                            <button onClick={saveWidgetEdit} style={{ background: "none", border: "none", cursor: "pointer", color: "#16a34a" }}><Check size={16} /></button>
+                            <button onClick={() => setEditWidgetIdx(null)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF" }}><X size={16} /></button>
+                          </>
+                        ) : (
+                          <>
+                            <span style={{ flex: 1, fontSize: 14, color: "#374151", fontWeight: 500 }}>{r}</span>
+                            <button onClick={() => { setEditWidgetIdx(i); setEditWidgetVal(r) }} style={{ background: "none", border: "none", cursor: "pointer", color: "#9CA3AF", padding: 4 }}><Edit3 size={14} /></button>
+                            <button onClick={() => removeWidgetReply(i)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444", padding: 4 }}><Trash2 size={14} /></button>
+                          </>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {savedWidget2 && <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 12, color: "#16a34a", fontSize: 13, fontWeight: 600 }}><Check size={14} /> Сохранено</div>}
+              </div>
+            )}
           </div>
         )}
 

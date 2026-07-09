@@ -27,6 +27,7 @@ model WorkspaceSettings {
   offlineText       String   @default("Мы сейчас офлайн. Оставьте сообщение — ответим в рабочее время.")
   primaryColor      String   @default("#F26522")
   quickReplies      String[] @default([])
+  widgetReplies     String[] @default([])
   operatorName      String   @default("Поддержка")
   operatorAvatar    String?
   privacyPolicyUrl  String   @default("")
