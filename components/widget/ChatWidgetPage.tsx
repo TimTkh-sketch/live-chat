@@ -12,6 +12,10 @@ interface Settings {
 interface Operator { id: string; name: string; avatar: string | null; isOnline: boolean }
 
 const SESSION_KEY = "lc_session_id"
+function parseQR(raw: string): { name: string; text: string } {
+  try { const p = JSON.parse(raw); if (p?.name !== undefined) return p } catch {}
+  return { name: raw, text: raw }
+}
 
 function formatTime(d: string) {
   return new Date(d).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit" })
@@ -340,8 +344,8 @@ export function ChatWidgetPage() {
             flexShrink: 0,
             WebkitOverflowScrolling: "touch",
           }}>
-            {settings.quickReplies.map((qr, i) => (
-              <button key={i} className="lc-qr" onClick={() => sendMessage(qr)}
+            {settings.quickReplies.map((raw, i) => { const qr = parseQR(raw); return (
+              <button key={i} className="lc-qr" onClick={() => sendMessage(qr.text)}
                 style={{
                   padding: "7px 16px",
                   borderRadius: 99,
@@ -356,9 +360,9 @@ export function ChatWidgetPage() {
                   WebkitTapHighlightColor: "transparent",
                   transition: "transform 0.1s",
                 }}>
-                {qr}
+                {qr.name}
               </button>
-            ))}
+            )})</}
           </div>
         )}
 
