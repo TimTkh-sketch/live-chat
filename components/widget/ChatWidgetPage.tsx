@@ -345,7 +345,7 @@ export function ChatWidgetPage() {
             WebkitOverflowScrolling: "touch",
           }}>
             {settings.quickReplies.map((raw, i) => { const qr = parseQR(raw); return (
-              <button key={i} className="lc-qr" onClick={() => sendMessage(qr.text)}
+              <button key={i} className="lc-qr" onClick={() => sendMessage(qr.name)}
                 style={{
                   padding: "7px 16px",
                   borderRadius: 99,
